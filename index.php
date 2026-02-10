@@ -78,6 +78,7 @@ require_once __DIR__ . '/guard.php';
               </div>
             </div>
             <div class="preview-meta" id="previewMeta">Choose a photo to preview.</div>
+            <div class="preview-hint hidden" id="previewHint">Tap/click the image to zoom (2x, 3x).</div>
           </div>
         </div>
 

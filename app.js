@@ -59,6 +59,7 @@ const elements = {
   previewImage: document.getElementById("previewImage"),
   previewPlaceholder: document.getElementById("previewPlaceholder"),
   previewMeta: document.getElementById("previewMeta"),
+  previewHint: document.getElementById("previewHint"),
   singleDrop: document.getElementById("singleDrop"),
   previewDrop: document.getElementById("previewDrop"),
   ocrToggle: document.getElementById("ocrToggle"),
@@ -477,7 +478,10 @@ function renderBulkList() {
     const fileMeta = document.createElement("div");
     fileMeta.className = "receipt-meta";
     fileMeta.textContent = formatSize(item.file.size);
-    fileInfo.append(fileName, fileMeta);
+    const zoomHint = document.createElement("div");
+    zoomHint.className = "bulk-zoom-hint";
+    zoomHint.textContent = "Zoom: tap/click (2x, 3x)";
+    fileInfo.append(fileName, fileMeta, zoomHint);
 
     left.append(previewFrame, fileInfo);
 
@@ -894,6 +898,7 @@ function clearPreview() {
   elements.previewImage.style.display = "none";
   elements.previewPlaceholder.style.display = "block";
   elements.previewMeta.textContent = "Choose a photo to preview.";
+  if (elements.previewHint) elements.previewHint.classList.add("hidden");
   resetPreviewZoom();
 }
 
@@ -907,6 +912,7 @@ function setPreview(file, metaText) {
   elements.previewImage.style.display = "block";
   elements.previewPlaceholder.style.display = "none";
   elements.previewImage.title = "Click to zoom: 2x, 3x";
+  if (elements.previewHint) elements.previewHint.classList.remove("hidden");
   resetPreviewZoom();
   const name = file.name ? file.name : "receipt image";
   elements.previewMeta.textContent = metaText || `${name} · ${formatSize(file.size)}`;

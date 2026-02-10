@@ -368,6 +368,15 @@ body::before {
   color: var(--muted);
 }
 
+.preview-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.preview-hint.hidden {
+  display: none;
+}
+
 .ocr-panel {
   border-radius: var(--radius);
   border: 1px solid var(--line);
@@ -585,6 +594,11 @@ textarea {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
+}
+
+.bulk-zoom-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
 }
 
 .bulk-ocr-status {
