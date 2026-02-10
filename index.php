@@ -34,7 +34,7 @@ require_once __DIR__ . '/guard.php';
       <header class="hero">
         <div>
           <p class="eyebrow">Receipt Logger</p>
-          <h1>Capture receipts on the go.</h1>
+          <h1>Receipt Keeper</h1>
           <p class="lede">
             Snap a photo or upload a receipt, then log the basics. Everything stays
             local in your browser.
