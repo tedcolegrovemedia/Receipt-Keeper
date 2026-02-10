@@ -1740,6 +1740,31 @@ function buildOcrSummary(suggestions) {
   return summary.join(" · ");
 }
 
+function mergeOcrSuggestions(primary, text) {
+  const fallback = typeof buildOcrSuggestions === "function" ? buildOcrSuggestions(text || "") || {} : {};
+  const source = primary || {};
+  const dateValue = source.date && String(source.date).trim() ? source.date : fallback.date || null;
+  const vendorValue =
+    source.vendor && String(source.vendor).trim() ? source.vendor : fallback.vendor || null;
+  const locationValue =
+    source.location && String(source.location).trim() ? source.location : fallback.location || null;
+  const primaryTotal = Number(source.total);
+  const fallbackTotal = Number(fallback.total);
+  const totalValue = Number.isFinite(primaryTotal)
+    ? primaryTotal
+    : Number.isFinite(fallbackTotal)
+      ? fallbackTotal
+      : null;
+  const merged = {
+    date: dateValue,
+    vendor: vendorValue,
+    location: locationValue,
+    total: totalValue,
+  };
+  const hasAny = Object.values(merged).some((value) => value !== null && value !== undefined && value !== "");
+  return hasAny ? merged : null;
+}
+
 async function runLocalOcrFlow(token, statusOverride = "") {
   if (!state.currentFile) return;
   if (isPdfFile(state.currentFile)) {
@@ -1886,7 +1911,9 @@ async function runVeryfiOcrForFile(file) {
   updateOcrRemaining();
   updateOcrStatusLabel();
   updateOcrToggleButton();
-  return { text: (data.text || "").trim(), suggestions: data.suggestions || null };
+  const text = (data.text || "").trim();
+  const suggestions = mergeOcrSuggestions(data.suggestions || null, text);
+  return { text, suggestions };
 }
 
 async function autoRunOcrForCurrentFile(token) {
