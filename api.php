@@ -225,7 +225,7 @@ try {
         }
 
         $entry = [
-            'time' => gmdate('c'),
+            'time' => (new DateTime('now', new DateTimeZone('America/New_York')))->format('c'),
             'ip' => $_SERVER['REMOTE_ADDR'] ?? '',
             'userAgent' => $_SERVER['HTTP_USER_AGENT'] ?? '',
             'url' => isset($data['url']) ? (string) $data['url'] : '',
