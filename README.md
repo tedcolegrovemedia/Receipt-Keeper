@@ -7,6 +7,7 @@ A lightweight, self-hosted receipt logger with OCR, bulk upload, and CSV export.
 - Auto OCR via Veryfi (local fallback available)
 - Bulk upload with auto-filled OCR fields
 - Business purpose required on every receipt
+- Category required on every receipt
 - Year filtering, pagination, CSV export
 - Simple password-protected access
 - SQLite storage

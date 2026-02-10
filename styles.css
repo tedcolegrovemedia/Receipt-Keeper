@@ -496,6 +496,38 @@ body::before {
   box-shadow: 0 0 0 2px rgba(182, 93, 58, 0.15);
 }
 
+.category-guide {
+  border-top: 1px dashed var(--line);
+  padding-top: 16px;
+  margin-top: 12px;
+}
+
+.category-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.category-table th,
+.category-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.category-table th {
+  font-weight: 600;
+}
+
+.category-table td {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.category-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
 .bulk-error {
   font-size: 0.9rem;
   color: var(--warning);
@@ -510,7 +542,8 @@ label {
 input[type="text"],
 input[type="date"],
 input[type="number"],
-input[type="search"] {
+input[type="search"],
+select:not(.year-select) {
   border-radius: 12px;
   border: 1px solid var(--line);
   padding: 10px 12px;

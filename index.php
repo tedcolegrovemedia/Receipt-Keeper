@@ -99,6 +99,10 @@ require_once __DIR__ . '/guard.php';
             <input type="text" id="receiptLocation" placeholder="City, State" />
           </label>
           <label>
+            Category
+            <select id="receiptCategory" required></select>
+          </label>
+          <label>
             Business Purpose
             <input type="text" id="receiptPurpose" placeholder="Client lunch" required />
           </label>
@@ -197,6 +201,29 @@ require_once __DIR__ . '/guard.php';
           <button class="btn ghost" id="nextPage" type="button">Next</button>
         </div>
       </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Expense Categories</h2>
+            <p>Reference guide for categorizing receipts.</p>
+          </div>
+          <button class="btn ghost" id="toggleCategories" type="button" aria-expanded="false">
+            Show categories
+          </button>
+        </div>
+        <div class="category-guide" id="categoryGuide" hidden>
+          <table class="category-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Explanation</th>
+              </tr>
+            </thead>
+            <tbody id="categoryTableBody"></tbody>
+          </table>
+        </div>
+      </section>
     </main>
 
     <div class="modal" id="imageModal" aria-hidden="true">
@@ -219,6 +246,10 @@ require_once __DIR__ . '/guard.php';
           <label>
             Location
             <input type="text" id="modalLocation" />
+          </label>
+          <label>
+            Category
+            <select id="modalCategory" required></select>
           </label>
           <label>
             Business Purpose

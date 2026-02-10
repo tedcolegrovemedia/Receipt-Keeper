@@ -190,11 +190,12 @@ try {
         $date = trim($_POST['date'] ?? '');
         $vendor = trim($_POST['vendor'] ?? '');
         $location = trim($_POST['location'] ?? '');
+        $category = trim($_POST['category'] ?? '');
         $businessPurpose = trim($_POST['businessPurpose'] ?? '');
         $totalRaw = trim($_POST['total'] ?? '');
         $createdAt = trim($_POST['createdAt'] ?? '') ?: gmdate('c');
 
-        if ($date === '' || $vendor === '' || $businessPurpose === '' || $totalRaw === '') {
+        if ($date === '' || $vendor === '' || $category === '' || $businessPurpose === '' || $totalRaw === '') {
             respond(['ok' => false, 'error' => 'Missing required fields.'], 422);
         }
 
@@ -262,6 +263,7 @@ try {
             'date' => $date,
             'vendor' => $vendor,
             'location' => $location,
+            'category' => $category,
             'businessPurpose' => $businessPurpose,
             'total' => $total,
             'createdAt' => $createdAt,

@@ -6,6 +6,54 @@ const OCR_MAX_DIM = 1600;
 
 const CURRENT_YEAR = new Date().getFullYear().toString();
 
+const EXPENSE_CATEGORIES = [
+  {
+    value: "Equipment & Gear",
+    description:
+      "Includes cameras, lenses, tripods, lighting, audio gear, computers, monitors, hard drives, memory cards, and other physical tools used to produce work. Also includes repairs, maintenance, and accessories related to this equipment. Higher-cost items may be depreciated over multiple years instead of expensed all at once, depending on tax treatment.",
+  },
+  {
+    value: "Software & Subscriptions",
+    description:
+      "Covers software and digital services required to run the business, such as photo and video editing tools, design software, cloud storage, website hosting, domain registrations, email services, AI tools, and project management platforms. Both monthly and annual subscriptions are included.",
+  },
+  {
+    value: "Vehicle & Travel",
+    description:
+      "Includes business-related mileage or actual vehicle expenses, fuel, maintenance, parking, tolls, flights, hotels, rental cars, and other travel costs incurred for client work, meetings, or shoots. Only the business portion of mixed-use travel should be included, and mileage logs should be maintained if applicable.",
+  },
+  {
+    value: "Home Office / Workspace",
+    description:
+      "Applies to expenses related to a dedicated workspace, whether a home office or rented workspace. Includes a portion of rent or mortgage interest, utilities, internet, insurance, and maintenance based on the percentage of the home used exclusively for business. Also includes coworking spaces or day-pass workspaces.",
+  },
+  {
+    value: "Meals & Entertainment",
+    description:
+      "Includes business meals with clients, collaborators, or for business planning purposes. The record should include who the meal was with and the business purpose discussed. Most meals are only partially deductible, so clear documentation is important.",
+  },
+  {
+    value: "Marketing & Advertising",
+    description:
+      "Covers costs used to promote the business, including website development, hosting, printing, advertising on social platforms or search engines, business cards, promotional materials, branding work, and sponsored posts or campaigns.",
+  },
+  {
+    value: "Professional Services",
+    description:
+      "Includes fees paid to professionals who support the business, such as accountants, bookkeepers, lawyers, consultants, coaches, and contractors like editors, designers, or second shooters. Also includes fees for compliance, filings, and professional advice.",
+  },
+  {
+    value: "Income Processing Fees",
+    description:
+      "Includes transaction and platform fees deducted by payment processors such as Stripe, PayPal, Square, or online marketplaces. These are often not invoiced separately but reduce gross income and should be tracked to ensure accurate net income reporting.",
+  },
+  {
+    value: "Other Business Expenses",
+    description:
+      "Catches legitimate business costs that do not fit cleanly into other categories, such as office supplies, shipping, postage, education, workshops, certifications, insurance premiums, and minor tools. Clear notes should explain the business purpose for each item.",
+  },
+];
+
 const state = {
   currentFile: null,
   ocrText: "",
@@ -69,6 +117,7 @@ const elements = {
   receiptDate: document.getElementById("receiptDate"),
   receiptVendor: document.getElementById("receiptVendor"),
   receiptLocation: document.getElementById("receiptLocation"),
+  receiptCategory: document.getElementById("receiptCategory"),
   receiptPurpose: document.getElementById("receiptPurpose"),
   receiptTotalInput: document.getElementById("receiptTotalInput"),
   saveReceipt: document.getElementById("saveReceipt"),
@@ -96,6 +145,7 @@ const elements = {
   modalDate: document.getElementById("modalDate"),
   modalVendor: document.getElementById("modalVendor"),
   modalLocation: document.getElementById("modalLocation"),
+  modalCategory: document.getElementById("modalCategory"),
   modalPurpose: document.getElementById("modalPurpose"),
   modalTotal: document.getElementById("modalTotal"),
   modalMeta: document.getElementById("modalMeta"),
@@ -108,6 +158,9 @@ const elements = {
   bulkSaveAll: document.getElementById("bulkSaveAll"),
   bulkClear: document.getElementById("bulkClear"),
   bulkStatus: document.getElementById("bulkStatus"),
+  toggleCategories: document.getElementById("toggleCategories"),
+  categoryGuide: document.getElementById("categoryGuide"),
+  categoryTableBody: document.getElementById("categoryTableBody"),
 };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -142,6 +195,49 @@ function formatShortDate(value) {
     return `${month}/${day}/${year}`;
   }
   return String(value);
+}
+
+function populateCategorySelect(select, value = "") {
+  if (!select) return;
+  select.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Select category";
+  placeholder.disabled = true;
+  placeholder.selected = !value;
+  select.append(placeholder);
+
+  EXPENSE_CATEGORIES.forEach((category) => {
+    const option = document.createElement("option");
+    option.value = category.value;
+    option.textContent = category.value;
+    select.append(option);
+  });
+
+  if (value) {
+    select.value = value;
+  }
+}
+
+function renderCategoryGuide() {
+  if (!elements.categoryTableBody) return;
+  elements.categoryTableBody.innerHTML = "";
+  EXPENSE_CATEGORIES.forEach((category) => {
+    const row = document.createElement("tr");
+    const nameCell = document.createElement("td");
+    nameCell.textContent = category.value;
+    const descCell = document.createElement("td");
+    descCell.textContent = category.description;
+    row.append(nameCell, descCell);
+    elements.categoryTableBody.append(row);
+  });
+}
+
+function setCategoryGuideOpen(isOpen) {
+  if (!elements.categoryGuide || !elements.toggleCategories) return;
+  elements.categoryGuide.hidden = !isOpen;
+  elements.toggleCategories.textContent = isOpen ? "Hide categories" : "Show categories";
+  elements.toggleCategories.setAttribute("aria-expanded", isOpen ? "true" : "false");
 }
 
 function applyOcrHighlight(input, durationMs = 5000) {
@@ -402,6 +498,7 @@ async function addReceipt(receipt) {
     formData.append("date", receipt.date || "");
     formData.append("vendor", receipt.vendor || "");
     formData.append("location", receipt.location || "");
+    formData.append("category", receipt.category || "");
     formData.append("businessPurpose", receipt.businessPurpose || "");
     formData.append("total", receipt.total != null ? receipt.total.toString() : "");
     formData.append("createdAt", receipt.createdAt || "");
@@ -476,6 +573,7 @@ function createBulkItem(file) {
     date: todayISO(),
     vendor: "",
     location: "",
+    category: "",
     businessPurpose: "",
     total: "",
     ocrStatus: "",
@@ -501,6 +599,7 @@ function validateBulkItem(item) {
   const errors = [];
   if (!item.date) errors.push("date");
   if (!item.vendor.trim()) errors.push("vendor");
+  if (!item.category.trim()) errors.push("category");
   if (!item.businessPurpose.trim()) errors.push("business purpose");
   const totalValue = parseFloat(item.total);
   if (Number.isNaN(totalValue)) errors.push("total");
@@ -617,6 +716,21 @@ function renderBulkList() {
     });
     locationLabel.append(locationInput);
 
+    const categoryLabel = document.createElement("label");
+    categoryLabel.textContent = "Category";
+    const categorySelect = document.createElement("select");
+    categorySelect.required = true;
+    populateCategorySelect(categorySelect, item.category);
+    categorySelect.addEventListener("change", () => {
+      item.category = categorySelect.value;
+      if (item.errors.length) {
+        item.errors = [];
+        card.classList.remove("invalid");
+        errorMsg.textContent = "";
+      }
+    });
+    categoryLabel.append(categorySelect);
+
     const purposeLabel = document.createElement("label");
     purposeLabel.textContent = "Business Purpose";
     const purposeInput = document.createElement("input");
@@ -655,7 +769,7 @@ function renderBulkList() {
     });
     totalLabel.append(totalInput);
 
-    fields.append(dateLabel, vendorLabel, locationLabel, purposeLabel, totalLabel);
+    fields.append(dateLabel, vendorLabel, locationLabel, categoryLabel, purposeLabel, totalLabel);
 
     const highlightUntil = item.ocrHighlightUntil || 0;
     if (highlightUntil > Date.now() && item.ocrHighlights) {
@@ -760,7 +874,7 @@ async function saveBulkReceipts() {
 
   if (hasErrors) {
     renderBulkList();
-    updateBulkControls("Fill in Date, Vendor, Business Purpose, and Total for all queued receipts.");
+    updateBulkControls("Fill in Date, Vendor, Category, Business Purpose, and Total for all queued receipts.");
     return;
   }
 
@@ -769,6 +883,7 @@ async function saveBulkReceipts() {
     date: item.date,
     vendor: item.vendor.trim(),
     location: item.location.trim(),
+    category: item.category.trim(),
     businessPurpose: item.businessPurpose.trim(),
     total: item.totalValue,
     createdAt: new Date().toISOString(),
@@ -1423,6 +1538,7 @@ function closeReceiptModal() {
   if (elements.modalDate) elements.modalDate.value = "";
   if (elements.modalVendor) elements.modalVendor.value = "";
   if (elements.modalLocation) elements.modalLocation.value = "";
+  if (elements.modalCategory) elements.modalCategory.value = "";
   if (elements.modalPurpose) elements.modalPurpose.value = "";
   if (elements.modalTotal) elements.modalTotal.value = "";
   state.modalReceipt = null;
@@ -1451,6 +1567,7 @@ function openReceiptModal(receipt) {
   }
   const metaParts = [];
   if (receipt.vendor) metaParts.push(receipt.vendor);
+  if (receipt.category) metaParts.push(receipt.category);
   if (receipt.businessPurpose) metaParts.push(receipt.businessPurpose);
   if (receipt.date) metaParts.push(receipt.date);
   if (receipt.total != null) metaParts.push(formatCurrency(Number(receipt.total)));
@@ -1460,6 +1577,7 @@ function openReceiptModal(receipt) {
   if (elements.modalDate) elements.modalDate.value = receipt.date || "";
   if (elements.modalVendor) elements.modalVendor.value = receipt.vendor || "";
   if (elements.modalLocation) elements.modalLocation.value = receipt.location || "";
+  if (elements.modalCategory) elements.modalCategory.value = receipt.category || "";
   if (elements.modalPurpose) elements.modalPurpose.value = receipt.businessPurpose || "";
   if (elements.modalTotal) {
     elements.modalTotal.value =
@@ -1651,6 +1769,7 @@ function resetForm() {
   elements.receiptForm.reset();
   if (elements.receiptImage) elements.receiptImage.value = "";
   elements.receiptDate.value = todayISO();
+  if (elements.receiptCategory) elements.receiptCategory.value = "";
   clearOcrHighlight(elements.receiptDate);
   clearOcrHighlight(elements.receiptVendor);
   clearOcrHighlight(elements.receiptLocation);
@@ -1700,7 +1819,7 @@ async function exportCsv() {
       ? receipts
       : receipts.filter((receipt) => getReceiptYear(receipt) === state.currentYear);
   if (scoped.length === 0) return;
-  const header = ["Date", "Vendor", "Location", "Business Purpose", "Total"];
+  const header = ["Date", "Vendor", "Location", "Category", "Business Purpose", "Total"];
   let sumTotal = 0;
   const rows = scoped.map((receipt) => {
     const value = Number(receipt.total);
@@ -1709,11 +1828,12 @@ async function exportCsv() {
       receipt.date || "",
       receipt.vendor || "",
       receipt.location || "",
+      receipt.category || "",
       receipt.businessPurpose || "",
       formatCurrency(Number.isFinite(value) ? value : 0),
     ];
   });
-  rows.push(["", "TOTAL", "", "", formatCurrency(sumTotal)]);
+  rows.push(["", "TOTAL", "", "", "", formatCurrency(sumTotal)]);
   const csv = [header, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
     .join("\n");
@@ -1738,6 +1858,16 @@ async function init() {
     return;
   }
   updateOcrRemaining();
+  populateCategorySelect(elements.receiptCategory);
+  populateCategorySelect(elements.modalCategory);
+  renderCategoryGuide();
+  setCategoryGuideOpen(false);
+  if (elements.toggleCategories) {
+    elements.toggleCategories.addEventListener("click", () => {
+      const isOpen = elements.categoryGuide ? !elements.categoryGuide.hidden : false;
+      setCategoryGuideOpen(!isOpen);
+    });
+  }
 
   document.addEventListener("dragover", (event) => {
     event.preventDefault();
@@ -1771,6 +1901,7 @@ async function init() {
     elements.receiptDate,
     elements.receiptVendor,
     elements.receiptLocation,
+    elements.receiptCategory,
     elements.receiptPurpose,
     elements.receiptTotalInput,
   ].forEach(
@@ -1794,11 +1925,18 @@ async function init() {
       return;
     }
 
+    const category = elements.receiptCategory.value.trim();
+    if (!category) {
+      setPreviewMessage("Please select a category.");
+      return;
+    }
+
     const receipt = {
       id: generateId(),
       date: elements.receiptDate.value,
       vendor: elements.receiptVendor.value.trim(),
       location: elements.receiptLocation.value.trim(),
+      category,
       businessPurpose,
       total: parseFloat(elements.receiptTotalInput.value),
       createdAt: new Date().toISOString(),
@@ -1876,17 +2014,27 @@ async function init() {
   if (elements.modalSave) {
     elements.modalSave.addEventListener("click", async () => {
       if (!state.modalReceipt) return;
-      if (!elements.modalDate || !elements.modalVendor || !elements.modalPurpose || !elements.modalTotal) return;
+      if (
+        !elements.modalDate ||
+        !elements.modalVendor ||
+        !elements.modalCategory ||
+        !elements.modalPurpose ||
+        !elements.modalTotal
+      ) {
+        return;
+      }
 
       const date = elements.modalDate.value;
       const vendor = elements.modalVendor.value.trim();
       const location = elements.modalLocation ? elements.modalLocation.value.trim() : "";
+      const category = elements.modalCategory.value.trim();
       const businessPurpose = elements.modalPurpose.value.trim();
       const totalValue = Number(elements.modalTotal.value);
 
-      if (!date || !vendor || !businessPurpose || !Number.isFinite(totalValue)) {
+      if (!date || !vendor || !category || !businessPurpose || !Number.isFinite(totalValue)) {
         if (elements.modalStatus) {
-          elements.modalStatus.textContent = "Please fill Date, Vendor, Business Purpose, and Total.";
+          elements.modalStatus.textContent =
+            "Please fill Date, Vendor, Category, Business Purpose, and Total.";
         }
         return;
       }
@@ -1897,6 +2045,7 @@ async function init() {
         date,
         vendor,
         location,
+        category,
         businessPurpose,
         total: totalValue,
         createdAt: existing.createdAt || new Date().toISOString(),
