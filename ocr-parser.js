@@ -346,8 +346,14 @@ function parseDateFromText(text) {
     .filter(Boolean);
   const monthNames =
     "(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
-  const monthRegex = new RegExp(`\\b${monthNames}\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,)?\\s+(\\d{4})\\b`, "i");
-  const dayFirstRegex = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${monthNames}\\s+(\\d{4})\\b`, "i");
+  const monthRegex = new RegExp(
+    `\\b${monthNames}[\\s\\/.\\-]+(\\d{1,2})(?:st|nd|rd|th)?(?:,)?[\\s\\/.\\-]+(\\d{4})\\b`,
+    "i"
+  );
+  const dayFirstRegex = new RegExp(
+    `\\b(\\d{1,2})(?:st|nd|rd|th)?[\\s\\/.\\-]+${monthNames}[\\s\\/.\\-]+(\\d{4})\\b`,
+    "i"
+  );
   const numericPatterns = [
     { regex: /\b(20\d{2}|19\d{2})[\/\-.](0?[1-9]|1[0-2])[\/\-.](0?[1-9]|[12]\d|3[01])\b/, order: "ymd" },
     { regex: /\b(0?[1-9]|1[0-2])[\/\-.](0?[1-9]|[12]\d|3[01])[\/\-.]((?:20)?\d{2})\b/, order: "mdy" },
