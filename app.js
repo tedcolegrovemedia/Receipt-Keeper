@@ -5,6 +5,7 @@ const PAGE_SIZE = 10;
 const OCR_MAX_DIM = 1600;
 
 const CURRENT_YEAR = new Date().getFullYear().toString();
+const OCR_OVERRIDE_KEY = "receipt_ocr_override";
 
 const EXPENSE_CATEGORIES = [
   {
@@ -98,6 +99,7 @@ const storage = {
   veryfiLimit: null,
   veryfiRemaining: null,
   ocrDefaultEnabled: false,
+  ocrOverride: "auto",
 };
 
 const bulkState = {
@@ -115,6 +117,7 @@ const elements = {
   ocrStatus: document.getElementById("ocrStatus"),
   ocrProgress: document.getElementById("ocrProgress"),
   ocrProgressFill: document.getElementById("ocrProgressFill"),
+  ocrTypeToggle: document.getElementById("ocrTypeToggle"),
   singleDrop: document.getElementById("singleDrop"),
   previewDrop: document.getElementById("previewDrop"),
   receiptForm: document.getElementById("receiptForm"),
@@ -489,21 +492,67 @@ function updateOcrRemaining() {
   elements.ocrRemaining.title = "";
 }
 
+function loadOcrOverride() {
+  try {
+    const value = localStorage.getItem(OCR_OVERRIDE_KEY);
+    if (value === "local" || value === "veryfi" || value === "auto") {
+      return value;
+    }
+  } catch (error) {
+    return "auto";
+  }
+  return "auto";
+}
+
+function setOcrOverride(value) {
+  storage.ocrOverride = value;
+  try {
+    localStorage.setItem(OCR_OVERRIDE_KEY, value);
+  } catch (error) {
+    // Ignore storage errors.
+  }
+  updateOcrStatusLabel();
+  updateOcrToggleButton();
+}
+
 function updateOcrStatusLabel() {
   if (!elements.ocrStatus) return;
   if (!storage.ocrDefaultEnabled) {
     elements.ocrStatus.textContent = "OCR: off";
     return;
   }
+  const override = storage.ocrOverride || "auto";
   if (storage.mode !== "server") {
-    elements.ocrStatus.textContent = "OCR: local";
+    elements.ocrStatus.textContent =
+      override === "local" ? "OCR: local (manual)" : "OCR: local";
     return;
   }
-  if (storage.veryfiAvailable) {
+  if (override === "veryfi") {
+    elements.ocrStatus.textContent = shouldRunVeryfi() ? "OCR: Veryfi (manual)" : "OCR: Veryfi unavailable";
+    return;
+  }
+  if (override === "local") {
+    elements.ocrStatus.textContent = "OCR: local (manual)";
+    return;
+  }
+  if (shouldRunVeryfi()) {
     elements.ocrStatus.textContent = "OCR: Veryfi";
     return;
   }
-  elements.ocrStatus.textContent = "OCR: local";
+  elements.ocrStatus.textContent = shouldRunLocalOcr() ? "OCR: local" : "OCR: off";
+}
+
+function updateOcrToggleButton() {
+  if (!elements.ocrTypeToggle) return;
+  const override = storage.ocrOverride || "auto";
+  const veryfiAvailable = shouldRunVeryfi() || (isVeryfiConfigured() && !isVeryfiExhausted());
+  if (override === "local") {
+    elements.ocrTypeToggle.textContent = "Use Veryfi";
+    elements.ocrTypeToggle.disabled = !veryfiAvailable;
+    return;
+  }
+  elements.ocrTypeToggle.textContent = "Use Local";
+  elements.ocrTypeToggle.disabled = false;
 }
 
 function setOcrProgressState({ active, value, indeterminate } = {}) {
@@ -1298,6 +1347,10 @@ function shouldRunVeryfi() {
   return storage.ocrDefaultEnabled && isVeryfiConfigured() && !isVeryfiExhausted();
 }
 
+function canRunLocalOcr() {
+  return storage.ocrDefaultEnabled;
+}
+
 function shouldRunLocalOcr() {
   if (!storage.ocrDefaultEnabled) return false;
   if (isVeryfiExhausted()) return false;
@@ -1694,6 +1747,8 @@ async function runVeryfiOcrForFile(file) {
     storage.veryfiLimit = data.veryfiLimit;
   }
   updateOcrRemaining();
+  updateOcrStatusLabel();
+  updateOcrToggleButton();
   return { text: (data.text || "").trim(), suggestions: data.suggestions || null };
 }
 
@@ -1706,7 +1761,33 @@ async function autoRunOcrForCurrentFile(token) {
     return;
   }
 
-  if (shouldRunVeryfi()) {
+  const override = storage.ocrOverride || "auto";
+  const canVeryfi = shouldRunVeryfi();
+  const canLocal = canRunLocalOcr();
+
+  if (override === "veryfi") {
+    if (!canVeryfi) {
+      setOcrStatusForToken(token, "OCR: Veryfi unavailable.");
+      setOcrProgressForToken(token, { active: false });
+      return;
+    }
+  }
+
+  if (override === "local") {
+    if (!canLocal) {
+      setOcrStatusForToken(token, "OCR: local unavailable.");
+      setOcrProgressForToken(token, { active: false });
+      return;
+    }
+    if (isPdfFile(state.currentFile)) {
+      setOcrStatusForToken(token, "OCR: PDF requires Veryfi.");
+      setOcrProgressForToken(token, { active: false });
+      logClientError("Local OCR skipped for PDF", { reason: "PDF requires Veryfi" });
+      return;
+    }
+  }
+
+  if ((override === "veryfi" || override === "auto") && canVeryfi) {
     setOcrStatusForToken(token, "OCR: running (Veryfi)...");
     setOcrProgressForToken(token, { active: true, indeterminate: true });
     try {
@@ -1731,13 +1812,7 @@ async function autoRunOcrForCurrentFile(token) {
     return;
   }
 
-  if (shouldRunLocalOcr()) {
-    if (isPdfFile(state.currentFile)) {
-      setOcrStatusForToken(token, "OCR: PDF requires Veryfi.");
-      setOcrProgressForToken(token, { active: false });
-      logClientError("Local OCR skipped for PDF", { reason: "Veryfi not configured" });
-      return;
-    }
+  if ((override === "local" || override === "auto") && shouldRunLocalOcr()) {
     const reason = getVeryfiBlockReason();
     const status = reason ? `OCR: using local (${reason})...` : "OCR: running locally...";
     setOcrStatusForToken(token, status);
@@ -2182,8 +2257,10 @@ async function init() {
     setPreviewMessage("IndexedDB is not supported in this browser.");
     return;
   }
+  storage.ocrOverride = loadOcrOverride();
   updateOcrRemaining();
   updateOcrStatusLabel();
+  updateOcrToggleButton();
   populateCategorySelect(elements.receiptCategory);
   populateCategorySelect(elements.modalCategory);
   renderCategoryGuide();
@@ -2192,6 +2269,19 @@ async function init() {
     elements.toggleCategories.addEventListener("click", () => {
       const isOpen = elements.categoryGuide ? !elements.categoryGuide.hidden : false;
       setCategoryGuideOpen(!isOpen);
+    });
+  }
+  if (elements.ocrTypeToggle) {
+    elements.ocrTypeToggle.addEventListener("click", () => {
+      const override = storage.ocrOverride || "auto";
+      const veryfiAvailable = shouldRunVeryfi() || (isVeryfiConfigured() && !isVeryfiExhausted());
+      if (override === "local") {
+        if (veryfiAvailable) {
+          setOcrOverride("veryfi");
+        }
+      } else {
+        setOcrOverride("local");
+      }
     });
   }
 
