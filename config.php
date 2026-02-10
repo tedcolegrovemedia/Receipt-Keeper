@@ -32,7 +32,6 @@ if (!defined('VERYFI_CLIENT_SECRET')) {
     define('VERYFI_CLIENT_SECRET', '');
 }
 const VERYFI_ENDPOINT = 'https://api.veryfi.com/api/v8/partner/documents';
-const VERYFI_WEBHOOKS_ENDPOINT = 'https://api.veryfi.com/api/v8/partner/settings/webhooks';
 const VERYFI_MONTHLY_LIMIT = 100;
 const VERYFI_USAGE_FILE = DATA_DIR . '/veryfi-usage.json';
 

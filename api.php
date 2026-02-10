@@ -424,44 +424,6 @@ try {
         ]);
     }
 
-    if ($action === 'veryfi_test') {
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            respond(['ok' => false, 'error' => 'Invalid request method.'], 405);
-        }
-        if (!veryfi_configured()) {
-            respond(['ok' => false, 'error' => 'Veryfi is not configured.'], 400);
-        }
-
-        $ch = curl_init(VERYFI_WEBHOOKS_ENDPOINT);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Accept: application/json',
-            'CLIENT-ID: ' . VERYFI_CLIENT_ID,
-            'Authorization: apikey ' . VERYFI_USERNAME . ':' . VERYFI_API_KEY,
-        ]);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 20);
-
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        if ($response === false) {
-            $message = curl_error($ch) ?: 'Veryfi request failed.';
-            close_curl_handle($ch);
-            respond(['ok' => false, 'error' => $message], 500);
-        }
-        close_curl_handle($ch);
-
-        $data = json_decode($response, true);
-        if ($httpCode >= 400) {
-            $errorMessage = is_array($data) ? ($data['error'] ?? $data['message'] ?? 'Veryfi returned an error.') : 'Veryfi returned an error.';
-            respond(['ok' => false, 'error' => $errorMessage], 502);
-        }
-
-        respond([
-            'ok' => true,
-            'httpCode' => $httpCode,
-        ]);
-    }
-
     respond(['ok' => false, 'error' => 'Unknown action.'], 404);
 } catch (Throwable $error) {
     error_log($error->getMessage() . ' in ' . $error->getFile() . ':' . $error->getLine());
