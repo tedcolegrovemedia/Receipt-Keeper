@@ -372,6 +372,11 @@ body::before {
   display: none;
 }
 
+.ocr-warning {
+  font-size: 0.85rem;
+  color: var(--warning);
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
