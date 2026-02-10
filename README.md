@@ -125,6 +125,7 @@ The installer also lets you pick storage:
 
 ## Production Notes
 - Point your web root to `public/` (recommended).
+- If you cannot change the web root (e.g., shared hosting), keep the root `.htaccess` so `/public` is used automatically.
 - Ensure `data/` is writable and not publicly accessible.
 - Keep `config/config.local.php` and `data/password.json` out of version control.
 - If SQLite is not available on your host, the app will use `data/receipts.json` instead.
