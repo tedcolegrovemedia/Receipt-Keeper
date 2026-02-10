@@ -486,6 +486,13 @@ body::before {
   gap: 12px;
 }
 
+@media (min-width: 900px) {
+  .bulk-fields {
+    column-gap: 18px;
+    row-gap: 16px;
+  }
+}
+
 .bulk-zoom-hint {
   font-size: 0.8rem;
   color: var(--muted);
