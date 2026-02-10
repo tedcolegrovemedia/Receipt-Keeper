@@ -1845,7 +1845,7 @@ function parseVendorFromText(text) {
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter((line) => line.length > 2);
   const skipRegex =
-    /(invoice|receipt|statement|order|subtotal|total|amount|balance|tax|change|payment|paid|date|due|billing|billed|shipping|ship|qty|quantity|item|items|description|plan|subscription|service|card|visa|mastercard|amex|cash|paypal|transaction|fee|reference|number|id|vat|email)/i;
+    /(summary|invoice|receipt|statement|order|status|delivery|subtotal|total|amount|balance|tax|change|payment|paid|date|due|billing|billed|shipping|ship|qty|quantity|item|items|description|plan|subscription|service|card|visa|mastercard|amex|cash|paypal|transaction|fee|reference|number|id|vat|email)/i;
   const companyRegex =
     /\b(inc|llc|l\.l\.c\.|corp|corporation|company|co\.|ltd|limited|gmbh|sarl|sa|plc|bv|oy|ab|ag|kg|pte|llp)\b/i;
   const emailRegex = /@/;
@@ -1854,7 +1854,9 @@ function parseVendorFromText(text) {
     /\b(\d{1,5}\s+\S+|street|st\.|avenue|ave\.|road|rd\.|boulevard|blvd\.|lane|ln\.|drive|dr\.|suite|ste\.|floor|fl\.|strasse|straße|str\.)\b/i;
   const postalRegex = /\b\d{5}(?:-\d{4})?\b/;
 
-  const isAddress = (line) => addressRegex.test(line);
+  const cityStateRegex = /\b[A-Za-z .'-]+,\s*[A-Z]{2}\b/;
+  const isAddress = (line) =>
+    addressRegex.test(line) || cityStateRegex.test(line) || postalRegex.test(line);
   const stripPrefixes = (line) =>
     line
       .replace(
@@ -1886,7 +1888,7 @@ function parseVendorFromText(text) {
     return score / words.length >= 0.6;
   };
   const hasLetters = (value) => /[A-Za-z]/.test(value);
-  const scoreLine = (line, index) => {
+  const scoreLine = (line, index, addressLineIndexes) => {
     const cleaned = normalizeCandidate(line);
     if (!cleaned || cleaned.length < 2 || cleaned.length > 80) return null;
     if (!hasLetters(cleaned)) return null;
@@ -1900,16 +1902,25 @@ function parseVendorFromText(text) {
     if (isAllCaps(cleaned) && cleaned.length <= 40) score += 2;
     const wordCount = cleaned.split(/\s+/).length;
     if (wordCount >= 1 && wordCount <= 6) score += 1;
+    if (wordCount === 1 && !hasCompany) score -= 1;
     if (index <= 2) score += 2;
     else if (index <= 5) score += 1;
+    if (addressLineIndexes.has(index + 1) || addressLineIndexes.has(index + 2)) score += 2;
     if (skipMatch) score -= 2;
     if (isAddress(cleaned) || postalRegex.test(cleaned)) score -= 3;
     return { value: cleaned.slice(0, 40), score };
   };
 
+  const addressLineIndexes = new Set();
+  lines.forEach((line, index) => {
+    if (isAddress(line)) {
+      addressLineIndexes.add(index);
+    }
+  });
+
   let best = null;
   lines.forEach((line, index) => {
-    const scored = scoreLine(line, index);
+    const scored = scoreLine(line, index, addressLineIndexes);
     if (!scored) return;
     if (!best || scored.score > best.score) {
       best = scored;
