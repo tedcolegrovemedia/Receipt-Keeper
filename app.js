@@ -1845,7 +1845,7 @@ function parseVendorFromText(text) {
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter((line) => line.length > 2);
   const skipRegex =
-    /(invoice|date|paid|total|amount|balance|tax|change|visa|mastercard|amex|cash|subtotal|payment|receipt|vat|email)/i;
+    /(invoice|receipt|statement|order|subtotal|total|amount|balance|tax|change|payment|paid|date|due|billing|billed|shipping|ship|qty|quantity|item|items|description|plan|subscription|service|card|visa|mastercard|amex|cash|paypal|transaction|fee|reference|number|id|vat|email)/i;
   const companyRegex =
     /\b(inc|llc|l\.l\.c\.|corp|corporation|company|co\.|ltd|limited|gmbh|sarl|sa|plc|bv|oy|ab|ag|kg|pte|llp)\b/i;
   const emailRegex = /@/;
@@ -1854,57 +1854,89 @@ function parseVendorFromText(text) {
     /\b(\d{1,5}\s+\S+|street|st\.|avenue|ave\.|road|rd\.|boulevard|blvd\.|lane|ln\.|drive|dr\.|suite|ste\.|floor|fl\.|strasse|straße|str\.)\b/i;
   const postalRegex = /\b\d{5}(?:-\d{4})?\b/;
 
-  const isSkippable = (line) =>
-    skipRegex.test(line) || emailRegex.test(line) || urlRegex.test(line) || postalRegex.test(line);
   const isAddress = (line) => addressRegex.test(line);
   const stripPrefixes = (line) =>
     line
-      .replace(/^(invoice|invoice number|date paid|date|paid|payment|bill to|sold by|from|vendor|merchant)\b[:\s-]*/i, "")
+      .replace(
+        /^(invoice|invoice number|date paid|date|paid|payment|bill to|sold by|from|vendor|merchant|seller|sold to|billed to)\b[:\s-]*/i,
+        ""
+      )
       .trim();
-  const extractCompanyLine = (line) => {
-    let candidate = line;
-    const addressMatch = candidate.match(addressRegex);
-    if (addressMatch && addressMatch.index !== undefined) {
-      candidate = candidate.slice(0, addressMatch.index).trim();
+  const stripAddressTail = (line) => {
+    const match = line.match(addressRegex);
+    if (match && match.index !== undefined && match.index > 0) {
+      return line.slice(0, match.index).trim();
     }
-    candidate = stripPrefixes(candidate);
-    if (candidate.length <= 2) return null;
-    const match = candidate.match(
-      /([A-Za-z0-9&.,'’\- ]{2,80}\b(inc|llc|l\.l\.c\.|corp|corporation|company|co\.|ltd|limited|gmbh|sarl|sa|plc|bv|oy|ab|ag|kg|pte|llp)\b)/i
-    );
-    if (match) {
-      return match[1].replace(/\s{2,}/g, " ").trim().slice(0, 40);
-    }
-    return null;
+    return line;
+  };
+  const normalizeCandidate = (line) => {
+    let candidate = stripPrefixes(line);
+    candidate = stripAddressTail(candidate);
+    candidate = candidate.replace(/\s{2,}/g, " ").trim();
+    return candidate;
+  };
+  const isAllCaps = (value) => /^[A-Z0-9 &.,'’\-]+$/.test(value);
+  const isTitleCase = (value) => {
+    const words = value.split(/\s+/).filter(Boolean);
+    if (words.length < 2) return false;
+    let score = 0;
+    words.forEach((word) => {
+      if (/^[A-Z]/.test(word)) score += 1;
+    });
+    return score / words.length >= 0.6;
+  };
+  const hasLetters = (value) => /[A-Za-z]/.test(value);
+  const scoreLine = (line, index) => {
+    const cleaned = normalizeCandidate(line);
+    if (!cleaned || cleaned.length < 2 || cleaned.length > 80) return null;
+    if (!hasLetters(cleaned)) return null;
+    if (emailRegex.test(cleaned) || urlRegex.test(cleaned)) return null;
+    const hasCompany = companyRegex.test(cleaned);
+    const skipMatch = skipRegex.test(cleaned);
+    let score = 0;
+    if (line !== cleaned) score += 3;
+    if (hasCompany) score += 3;
+    if (isTitleCase(cleaned)) score += 2;
+    if (isAllCaps(cleaned) && cleaned.length <= 40) score += 2;
+    const wordCount = cleaned.split(/\s+/).length;
+    if (wordCount >= 1 && wordCount <= 6) score += 1;
+    if (index <= 2) score += 2;
+    else if (index <= 5) score += 1;
+    if (skipMatch) score -= 2;
+    if (isAddress(cleaned) || postalRegex.test(cleaned)) score -= 3;
+    return { value: cleaned.slice(0, 40), score };
   };
 
-  for (const line of lines) {
-    if (companyRegex.test(line)) {
-      const extracted = extractCompanyLine(line);
-      if (extracted) return extracted;
-      if (!isAddress(line) && !emailRegex.test(line) && !urlRegex.test(line)) {
-        return stripPrefixes(line).slice(0, 40);
-      }
+  let best = null;
+  lines.forEach((line, index) => {
+    const scored = scoreLine(line, index);
+    if (!scored) return;
+    if (!best || scored.score > best.score) {
+      best = scored;
     }
+  });
+  if (best && best.score > 0) {
+    return best.value;
   }
 
   for (let i = 0; i < lines.length - 1; i += 1) {
     if (!skipRegex.test(lines[i])) continue;
     for (let j = i + 1; j < lines.length; j += 1) {
       const candidate = lines[j];
-      if (!/[A-Za-z]/.test(candidate)) continue;
+      if (!hasLetters(candidate)) continue;
       if (emailRegex.test(candidate) || urlRegex.test(candidate)) continue;
       if (isAddress(candidate)) continue;
-      const cleaned = stripPrefixes(candidate);
+      const cleaned = normalizeCandidate(candidate);
       if (cleaned) return cleaned.slice(0, 40);
     }
   }
 
   for (const line of lines) {
-    if (/[A-Za-z]/.test(line) && !emailRegex.test(line) && !urlRegex.test(line)) {
-      if (isAddress(line)) continue;
-      if (!isSkippable(line)) return line.slice(0, 40);
-    }
+    if (!hasLetters(line)) continue;
+    if (emailRegex.test(line) || urlRegex.test(line)) continue;
+    if (isAddress(line)) continue;
+    if (skipRegex.test(line)) continue;
+    return normalizeCandidate(line).slice(0, 40);
   }
   return null;
 }
