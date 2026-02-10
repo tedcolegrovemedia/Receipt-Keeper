@@ -1,5 +1,6 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
+  RewriteBase /writeoff/
 
   # Allow ACME challenges (if needed)
   RewriteRule ^\.well-known/ - [L]
@@ -7,10 +8,14 @@
   # Block direct access to non-public folders
   RewriteRule ^(app|config|data|\.git)(/|$) - [F,L]
 
+  # If already in /public, stop here
+  RewriteRule ^public/ - [L]
+
+  # Skip existing files/dirs
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
   # Route everything through /public without exposing /public in the URL
-  RewriteRule ^$ public/ [L]
-  RewriteCond %{REQUEST_URI} !^/public/
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
