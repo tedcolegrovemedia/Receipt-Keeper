@@ -8,18 +8,6 @@ const PDFJS_SOURCES = [
     script: "vendor/pdfjs/pdf.min.js",
     worker: "vendor/pdfjs/pdf.worker.min.js",
   },
-  {
-    script: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.js",
-    worker: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js",
-  },
-  {
-    script: "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.js",
-    worker: "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.js",
-  },
-  {
-    script: "https://unpkg.com/pdfjs-dist@4.2.67/build/pdf.min.js",
-    worker: "https://unpkg.com/pdfjs-dist@4.2.67/build/pdf.worker.min.js",
-  },
 ];
 
 const CURRENT_YEAR = new Date().getFullYear().toString();
@@ -119,6 +107,7 @@ const storage = {
   veryfiRemaining: null,
   ocrDefaultEnabled: false,
   ocrOverride: "auto",
+  pdfJsAvailable: null,
 };
 
 const bulkState = {
@@ -447,6 +436,7 @@ async function initStorage() {
       storage.veryfiLimit = Number.isFinite(data.veryfiLimit) ? data.veryfiLimit : null;
       storage.veryfiRemaining = Number.isFinite(data.veryfiRemaining) ? data.veryfiRemaining : null;
       storage.ocrDefaultEnabled = Boolean(data.ocrDefaultEnabled);
+      storage.pdfJsAvailable = Boolean(data.pdfJsAvailable);
     } else {
       storage.mode = "local";
       storage.ocrDefaultEnabled = true;
@@ -633,7 +623,7 @@ async function loadPdfJs() {
   }
   throw (
     lastError ||
-    new Error("PDF reader unavailable. Add vendor/pdfjs/pdf.min.js and pdf.worker.min.js or allow CDN access.")
+    new Error("PDF reader unavailable. Add vendor/pdfjs/pdf.min.js and pdf.worker.min.js.")
   );
 }
 
@@ -1435,6 +1425,13 @@ function shouldRunLocalOcr() {
   return storage.mode === "local" || !isVeryfiConfigured();
 }
 
+function canUsePdfText() {
+  if (storage.mode === "server") {
+    return Boolean(storage.pdfJsAvailable);
+  }
+  return true;
+}
+
 function buildOcrSummary(suggestions) {
   if (!suggestions) return "";
   const summary = [];
@@ -1858,6 +1855,11 @@ async function autoRunOcrForCurrentFile(token) {
       return;
     }
     if (isPdfFile(state.currentFile)) {
+      if (!canUsePdfText()) {
+        setOcrStatusForToken(token, "OCR: PDF text unavailable (missing PDF.js).");
+        setOcrProgressForToken(token, { active: false });
+        return;
+      }
       try {
         const text = await extractPdfText(state.currentFile, token);
         if (!isActiveToken(token)) return;
@@ -1886,6 +1888,36 @@ async function autoRunOcrForCurrentFile(token) {
   }
 
   if (override === "auto" && isPdfFile(state.currentFile)) {
+    if (!canUsePdfText()) {
+      if (canVeryfi) {
+        setOcrStatusForToken(token, "OCR: PDF text unavailable, using Veryfi...");
+        setOcrProgressForToken(token, { active: true, indeterminate: true });
+        try {
+          const { text, suggestions } = await runVeryfiOcrForFile(state.currentFile);
+          if (!isActiveToken(token)) return;
+          state.ocrText = text;
+          state.ocrSuggestions = suggestions || null;
+          if (state.ocrSuggestions) {
+            applySuggestions();
+            const summary = buildOcrSummary(state.ocrSuggestions);
+            setOcrStatusForToken(token, summary ? `OCR: applied. ${summary}` : "OCR: applied.");
+          } else {
+            setOcrStatusForToken(token, "OCR: no suggestions.");
+          }
+          setOcrProgressForToken(token, { active: false });
+          return;
+        } catch (veryfiError) {
+          if (!isActiveToken(token)) return;
+          setOcrStatusForToken(token, `OCR: ${veryfiError.message}`);
+          setOcrProgressForToken(token, { active: false });
+          logClientError("Veryfi OCR failed after PDF missing", { error: veryfiError.message });
+          return;
+        }
+      }
+      setOcrStatusForToken(token, "OCR: PDF text unavailable.");
+      setOcrProgressForToken(token, { active: false });
+      return;
+    }
     try {
       const text = await extractPdfText(state.currentFile, token);
       if (!isActiveToken(token)) return;

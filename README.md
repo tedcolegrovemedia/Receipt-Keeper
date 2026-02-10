@@ -61,12 +61,14 @@ define('OCR_DEFAULT_ENABLED', false);
 ```
 
 ### 4) (Optional) Local PDF text extraction
-If your server blocks CDNs, download PDF.js into `vendor/pdfjs/`:
+PDF text extraction requires PDF.js. Download it into `vendor/pdfjs/`:
 
 ```
 vendor/pdfjs/pdf.min.js
 vendor/pdfjs/pdf.worker.min.js
 ```
+
+If those files are missing, PDF uploads will fall back to Veryfi (when available) or skip OCR with a notice.
 
 ## Run Locally
 

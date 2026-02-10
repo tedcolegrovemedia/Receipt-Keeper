@@ -36,6 +36,18 @@ function veryfi_configured(): bool
     return true;
 }
 
+function pdfjs_available(): bool
+{
+    $script = __DIR__ . '/vendor/pdfjs/pdf.min.js';
+    $worker = __DIR__ . '/vendor/pdfjs/pdf.worker.min.js';
+    return is_file($script)
+        && is_readable($script)
+        && filesize($script) > 0
+        && is_file($worker)
+        && is_readable($worker)
+        && filesize($worker) > 0;
+}
+
 function veryfi_serialize_value($value): string
 {
     if (is_array($value)) {
@@ -162,6 +174,7 @@ try {
             'storage' => receipts_use_sqlite() ? 'sqlite' : 'json',
             'veryfi' => $configured,
             'ocrDefaultEnabled' => OCR_DEFAULT_ENABLED,
+            'pdfJsAvailable' => pdfjs_available(),
             'veryfiLimit' => $usage['limit'],
             'veryfiRemaining' => $usage['remaining'],
         ]);
