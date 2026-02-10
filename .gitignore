@@ -1,0 +1,12 @@
+# Local secrets
+config.local.php
+
+# App data (receipts, logs, uploads)
+data/*
+!data/.htaccess
+
+# OS / editor
+.DS_Store
+
+# Logs
+*.log
