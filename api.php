@@ -384,9 +384,6 @@ try {
                 $location = $state;
             }
         }
-        if ($location === '') {
-            $location = veryfi_extract_field($data, ['vendor.address', 'vendor_address', 'store_address', 'address']);
-        }
 
         $usage = increment_veryfi_usage();
         respond([
