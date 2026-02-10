@@ -21,7 +21,6 @@ require_once __DIR__ . '/guard.php';
       <nav class="top-nav">
         <div class="nav-brand">
           <span class="nav-title">Receipt Logger</span>
-          <span class="nav-subtitle">Private workspace</span>
         </div>
         <div class="nav-actions">
           <button class="btn ghost small" id="themeToggle" type="button" aria-pressed="false">
