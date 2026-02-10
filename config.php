@@ -2,7 +2,6 @@
 declare(strict_types=1);
 
 const APP_USERNAME = 'admin';
-const APP_PASSWORD_HASH = '$2y$12$8wb2q8YMgXSbXub8WD/8kec9Jz2aRNokurK1hF4QGHQCosasKAS.W';
 const SESSION_NAME = 'receipts_session';
 const DATA_DIR = __DIR__ . '/data';
 const PASSWORD_FILE = DATA_DIR . '/password.json';
@@ -72,7 +71,7 @@ function get_password_hash(): string
             }
         }
     }
-    return APP_PASSWORD_HASH;
+    return '';
 }
 
 function set_password_hash(string $hash): bool
