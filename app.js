@@ -1384,6 +1384,12 @@ function setPreviewMessage(message) {
 function setOcrStatus(message) {
   state.ocrStatusText = message || "";
   updatePreviewMeta();
+  if (!elements.ocrStatus) return;
+  if (state.ocrStatusText) {
+    elements.ocrStatus.textContent = state.ocrStatusText;
+  } else {
+    updateOcrStatusLabel();
+  }
 }
 
 function clearPreview() {
