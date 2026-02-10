@@ -11,9 +11,9 @@ if (!empty($_SESSION['authenticated'])) {
 }
 
 $error = '';
-$passwordReady = !(APP_PASSWORD_HASH === 'REPLACE_WITH_PASSWORD_HASH' && !is_file(PASSWORD_FILE));
+$passwordReady = get_password_hash() !== '';
 if (!$passwordReady) {
-    $error = 'Password not set. Update config.php with a password hash before signing in.';
+    $error = 'Password not set. Create data/password.json with a bcrypt hash before signing in.';
 }
 
 $ip = get_client_ip();
