@@ -60,7 +60,6 @@ const elements = {
   receiptImage: document.getElementById("receiptImage"),
   previewImage: document.getElementById("previewImage"),
   previewPlaceholder: document.getElementById("previewPlaceholder"),
-  previewMeta: document.getElementById("previewMeta"),
   previewHint: document.getElementById("previewHint"),
   singleDrop: document.getElementById("singleDrop"),
   previewDrop: document.getElementById("previewDrop"),

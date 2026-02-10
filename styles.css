@@ -363,11 +363,6 @@ body::before {
   color: var(--muted);
 }
 
-.preview-meta {
-  font-size: 0.9rem;
-  color: var(--muted);
-}
-
 .preview-hint {
   font-size: 0.8rem;
   color: var(--muted);
