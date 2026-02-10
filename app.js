@@ -56,6 +56,8 @@ const bulkState = {
   items: [],
 };
 
+const ocrHighlightTimers = new WeakMap();
+
 const elements = {
   receiptImage: document.getElementById("receiptImage"),
   previewImage: document.getElementById("previewImage"),
@@ -137,6 +139,30 @@ function formatShortDate(value) {
     return `${month}/${day}/${year}`;
   }
   return String(value);
+}
+
+function applyOcrHighlight(input, durationMs = 5000) {
+  if (!input) return;
+  input.classList.add("ocr-filled");
+  const existing = ocrHighlightTimers.get(input);
+  if (existing) {
+    clearTimeout(existing);
+  }
+  const timeout = window.setTimeout(() => {
+    input.classList.remove("ocr-filled");
+    ocrHighlightTimers.delete(input);
+  }, Math.max(0, durationMs));
+  ocrHighlightTimers.set(input, timeout);
+}
+
+function clearOcrHighlight(input) {
+  if (!input) return;
+  input.classList.remove("ocr-filled");
+  const existing = ocrHighlightTimers.get(input);
+  if (existing) {
+    clearTimeout(existing);
+    ocrHighlightTimers.delete(input);
+  }
 }
 
 function isImageFile(file) {
@@ -522,6 +548,7 @@ function renderBulkList() {
     dateInput.required = true;
     dateInput.addEventListener("input", () => {
       item.date = dateInput.value;
+      clearOcrHighlight(dateInput);
       if (item.errors.length) {
         item.errors = [];
         card.classList.remove("invalid");
@@ -539,6 +566,7 @@ function renderBulkList() {
     vendorInput.required = true;
     vendorInput.addEventListener("input", () => {
       item.vendor = vendorInput.value;
+      clearOcrHighlight(vendorInput);
       if (item.errors.length) {
         item.errors = [];
         card.classList.remove("invalid");
@@ -555,6 +583,7 @@ function renderBulkList() {
     locationInput.value = item.location;
     locationInput.addEventListener("input", () => {
       item.location = locationInput.value;
+      clearOcrHighlight(locationInput);
     });
     locationLabel.append(locationInput);
 
@@ -569,6 +598,7 @@ function renderBulkList() {
     totalInput.required = true;
     totalInput.addEventListener("input", () => {
       item.total = totalInput.value;
+      clearOcrHighlight(totalInput);
       if (item.errors.length) {
         item.errors = [];
         card.classList.remove("invalid");
@@ -578,6 +608,18 @@ function renderBulkList() {
     totalLabel.append(totalInput);
 
     fields.append(dateLabel, vendorLabel, locationLabel, totalLabel);
+
+    const highlightUntil = item.ocrHighlightUntil || 0;
+    if (highlightUntil > Date.now() && item.ocrHighlights) {
+      const remaining = highlightUntil - Date.now();
+      if (item.ocrHighlights.date) applyOcrHighlight(dateInput, remaining);
+      if (item.ocrHighlights.vendor) applyOcrHighlight(vendorInput, remaining);
+      if (item.ocrHighlights.location) applyOcrHighlight(locationInput, remaining);
+      if (item.ocrHighlights.total) applyOcrHighlight(totalInput, remaining);
+    } else if (item.ocrHighlights) {
+      item.ocrHighlights = null;
+      item.ocrHighlightUntil = 0;
+    }
 
     const errorMsg = document.createElement("div");
     errorMsg.className = "bulk-error";
@@ -1132,24 +1174,34 @@ function applySuggestions() {
   const suggestions = state.ocrSuggestions;
   if (!suggestions) return;
 
-  const maybeSet = (input, value, label) => {
+  const maybeSet = (input, value) => {
     if (!value) return;
     if (!input.value) {
       input.value = value;
-      return;
+      return true;
     }
     if (input.value && input.value !== value) {
       input.value = value;
+      return true;
     }
+    return false;
   };
 
-  maybeSet(elements.receiptDate, suggestions.date, "date");
-  maybeSet(elements.receiptVendor, suggestions.vendor, "vendor");
-  maybeSet(elements.receiptLocation, suggestions.location, "location");
+  if (maybeSet(elements.receiptDate, suggestions.date)) {
+    applyOcrHighlight(elements.receiptDate);
+  }
+  if (maybeSet(elements.receiptVendor, suggestions.vendor)) {
+    applyOcrHighlight(elements.receiptVendor);
+  }
+  if (maybeSet(elements.receiptLocation, suggestions.location)) {
+    applyOcrHighlight(elements.receiptLocation);
+  }
   if (suggestions.total !== null && suggestions.total !== undefined) {
     const totalValue = Number(suggestions.total);
     if (Number.isFinite(totalValue)) {
-      maybeSet(elements.receiptTotalInput, totalValue.toFixed(2), "total");
+      if (maybeSet(elements.receiptTotalInput, totalValue.toFixed(2))) {
+        applyOcrHighlight(elements.receiptTotalInput);
+      }
     }
   }
 }
@@ -1245,14 +1297,29 @@ async function autoRunOcrForCurrentFile(token) {
 
 function applyOcrToBulkItem(item, suggestions) {
   if (!suggestions) return;
-  if (suggestions.date) item.date = suggestions.date;
-  if (suggestions.vendor) item.vendor = suggestions.vendor;
-  if (suggestions.location) item.location = suggestions.location;
+  const highlights = {};
+  if (suggestions.date) {
+    item.date = suggestions.date;
+    highlights.date = true;
+  }
+  if (suggestions.vendor) {
+    item.vendor = suggestions.vendor;
+    highlights.vendor = true;
+  }
+  if (suggestions.location) {
+    item.location = suggestions.location;
+    highlights.location = true;
+  }
   if (suggestions.total !== null && suggestions.total !== undefined) {
     const value = Number(suggestions.total);
     if (Number.isFinite(value)) {
       item.total = value.toFixed(2);
+      highlights.total = true;
     }
+  }
+  if (Object.keys(highlights).length > 0) {
+    item.ocrHighlights = highlights;
+    item.ocrHighlightUntil = Date.now() + 5000;
   }
 }
 
@@ -1538,6 +1605,10 @@ function resetForm() {
   elements.receiptForm.reset();
   if (elements.receiptImage) elements.receiptImage.value = "";
   elements.receiptDate.value = todayISO();
+  clearOcrHighlight(elements.receiptDate);
+  clearOcrHighlight(elements.receiptVendor);
+  clearOcrHighlight(elements.receiptLocation);
+  clearOcrHighlight(elements.receiptTotalInput);
   clearPreview();
   resetOcrState();
 }
@@ -1646,6 +1717,13 @@ async function init() {
       event.target.value = "";
     });
   }
+
+  [elements.receiptDate, elements.receiptVendor, elements.receiptLocation, elements.receiptTotalInput].forEach(
+    (input) => {
+      if (!input) return;
+      input.addEventListener("input", () => clearOcrHighlight(input));
+    }
+  );
 
   attachZoomHandlers(elements.previewDrop, elements.previewImage, previewZoom);
 
