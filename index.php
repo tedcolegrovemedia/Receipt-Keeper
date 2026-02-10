@@ -278,6 +278,7 @@ require_once __DIR__ . '/guard.php';
       </div>
     </div>
 
+    <script src="ocr-parser.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
