@@ -13,6 +13,30 @@ function normalizeVendorKey(value) {
   return normalizeLine(value).replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+const COMMON_VENDOR_TOKENS = new Set([
+  "inc",
+  "llc",
+  "co",
+  "corp",
+  "corporation",
+  "company",
+  "ltd",
+  "limited",
+  "gmbh",
+  "sarl",
+  "sa",
+  "plc",
+  "bv",
+  "oy",
+  "ab",
+  "ag",
+  "kg",
+  "pte",
+  "llp",
+  "group",
+  "holdings",
+]);
+
 function extractVendorSignals(text, vendor) {
   if (!text || !vendor) return null;
   const lines = text
@@ -39,25 +63,27 @@ function extractVendorSignals(text, vendor) {
   const addressLines = [];
   lines.forEach((line) => {
     if (addressLines.length >= 4) return;
+    if (line.length > 120) return;
     if (addressRegex.test(line) || cityStateRegex.test(line) || postalRegex.test(line)) {
       addressLines.push(normalizeLine(line));
     }
   });
 
   const topLines = lines
-    .slice(0, 6)
+    .slice(0, 8)
     .map((line) => normalizeLine(line))
-    .filter((line) => line.length > 0 && line.length <= 80);
+    .filter((line) => line.length > 0 && line.length <= 120);
 
   const tokens = normalizeVendorKey(vendor)
     .split(/\s+/)
-    .filter((token) => token.length > 2);
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2 && !COMMON_VENDOR_TOKENS.has(token));
 
   return {
     vendor,
     domains: Array.from(domains),
     addresses: addressLines,
-    lines: topLines,
+    lines: Array.from(new Set([normalizeLine(vendor), ...topLines])),
     tokens,
   };
 }
@@ -75,14 +101,29 @@ function matchVendorFromMemory(text, memory) {
     if (!entry || !entry.vendor) return;
     let score = 0;
     const domains = Array.isArray(entry.domains) ? entry.domains : [];
-    const addresses = Array.isArray(entry.addresses) ? entry.addresses : [];
-    const snippets = Array.isArray(entry.lines) ? entry.lines : [];
-    const tokens = Array.isArray(entry.tokens) ? entry.tokens : [];
+    const addresses = (Array.isArray(entry.addresses) ? entry.addresses : []).filter(
+      (addr) => addr && addr.length <= 120
+    );
+    const snippets = (Array.isArray(entry.lines) ? entry.lines : []).filter(
+      (snippet) => snippet && snippet.length <= 120
+    );
+    const tokens = (Array.isArray(entry.tokens) ? entry.tokens : []).filter(
+      (token) => token && token.length > 2 && !COMMON_VENDOR_TOKENS.has(token)
+    );
+    const vendorName = normalizeLine(entry.vendor);
+    const vendorKey = entry.key ? normalizeLine(entry.key) : normalizeVendorKey(entry.vendor);
 
+    if (vendorName && normalizedText.includes(vendorName)) score += 4;
+    if (vendorKey && normalizedText.includes(vendorKey)) score += 3;
     if (domains.some((domain) => normalizedText.includes(domain))) score += 5;
     if (addresses.some((addr) => normalizedText.includes(addr))) score += 3;
     if (snippets.some((snippet) => normalizedText.includes(snippet))) score += 2;
-    if (tokens.length > 0 && tokens.every((token) => normalizedText.includes(token))) score += 1;
+    if (tokens.length > 0) {
+      const matched = tokens.filter((token) => normalizedText.includes(token));
+      const strong = matched.filter((token) => token.length >= 4);
+      if (strong.length > 0) score += 2;
+      if (matched.length === tokens.length && tokens.length > 0) score += 1;
+    }
     if (typeof entry.count === "number" && entry.count > 2) score += 1;
     if (score <= 0) return;
 
@@ -91,7 +132,7 @@ function matchVendorFromMemory(text, memory) {
     }
   });
 
-  if (best && best.score >= 4) {
+  if (best && best.score >= 3) {
     return best.vendor;
   }
   return null;
