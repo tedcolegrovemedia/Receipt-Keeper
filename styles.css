@@ -436,8 +436,8 @@ body.dark::before {
 }
 
 .btn.small {
-  padding: 6px 12px;
-  font-size: 0.85rem;
+  padding: 10px 16px;
+  font-size: 1rem;
 }
 
 .ocr-progress {
