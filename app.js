@@ -48,6 +48,7 @@ const storage = {
   veryfiAvailable: false,
   veryfiLimit: null,
   veryfiRemaining: null,
+  ocrDefaultEnabled: false,
 };
 
 const bulkState = {
@@ -293,6 +294,7 @@ async function initStorage() {
       storage.veryfiAvailable = Boolean(data.veryfi);
       storage.veryfiLimit = Number.isFinite(data.veryfiLimit) ? data.veryfiLimit : null;
       storage.veryfiRemaining = Number.isFinite(data.veryfiRemaining) ? data.veryfiRemaining : null;
+      storage.ocrDefaultEnabled = Boolean(data.ocrDefaultEnabled);
     } else {
       storage.mode = "local";
     }
@@ -1635,6 +1637,9 @@ async function init() {
     } else {
       elements.ocrProvider.value = "local";
     }
+  }
+  if (elements.ocrToggle) {
+    elements.ocrToggle.checked = storage.ocrDefaultEnabled && storage.veryfiAvailable;
   }
   updateVeryfiStatus();
 

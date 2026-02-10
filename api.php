@@ -160,6 +160,7 @@ try {
             'ok' => true,
             'mode' => 'server',
             'veryfi' => $configured,
+            'ocrDefaultEnabled' => OCR_DEFAULT_ENABLED,
             'veryfiLimit' => $usage['limit'],
             'veryfiRemaining' => $usage['remaining'],
         ]);
