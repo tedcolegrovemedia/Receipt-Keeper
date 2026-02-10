@@ -468,6 +468,7 @@ function renderBulkList() {
     const img = document.createElement("img");
     img.src = item.previewUrl;
     img.alt = `Queued receipt ${index + 1}`;
+    img.title = "Click to zoom: 2x, 3x";
     previewFrame.append(img);
 
     const fileInfo = document.createElement("div");
@@ -905,6 +906,7 @@ function setPreview(file, metaText) {
   elements.previewImage.src = url;
   elements.previewImage.style.display = "block";
   elements.previewPlaceholder.style.display = "none";
+  elements.previewImage.title = "Click to zoom: 2x, 3x";
   resetPreviewZoom();
   const name = file.name ? file.name : "receipt image";
   elements.previewMeta.textContent = metaText || `${name} · ${formatSize(file.size)}`;
