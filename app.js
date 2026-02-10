@@ -21,6 +21,23 @@ const state = {
   modalReceipt: null,
 };
 
+const previewZoom = {
+  mode: "none",
+  scale: 1,
+  x: 0,
+  y: 0,
+  baseWidth: 0,
+  baseHeight: 0,
+  minScale: 1,
+  maxScale: 3,
+  isPinching: false,
+  isPanning: false,
+  startDist: 0,
+  startScale: 1,
+  lastX: 0,
+  lastY: 0,
+};
+
 const storage = {
   mode: "local",
   veryfiAvailable: false,
@@ -615,17 +632,88 @@ async function saveBulkReceipts() {
   }
 }
 
+function resetPreviewZoom() {
+  previewZoom.mode = "none";
+  previewZoom.scale = 1;
+  previewZoom.x = 0;
+  previewZoom.y = 0;
+  previewZoom.isPinching = false;
+  previewZoom.isPanning = false;
+  previewZoom.startDist = 0;
+  previewZoom.startScale = 1;
+  previewZoom.lastX = 0;
+  previewZoom.lastY = 0;
+  if (elements.previewImage) {
+    elements.previewImage.style.transform = "scale(1)";
+    elements.previewImage.style.transformOrigin = "50% 50%";
+  }
+  if (elements.previewDrop) {
+    elements.previewDrop.classList.remove("mouse-zoom", "touch-zoom");
+  }
+}
+
+function updatePreviewBaseSize() {
+  if (!elements.previewImage || elements.previewImage.style.display === "none") return;
+  const rect = elements.previewImage.getBoundingClientRect();
+  previewZoom.baseWidth = rect.width;
+  previewZoom.baseHeight = rect.height;
+}
+
+function clampPreviewPan() {
+  if (!elements.previewDrop) return;
+  const container = elements.previewDrop.getBoundingClientRect();
+  const scaledWidth = previewZoom.baseWidth * previewZoom.scale;
+  const scaledHeight = previewZoom.baseHeight * previewZoom.scale;
+  const maxX = Math.max(0, (scaledWidth - container.width) / 2);
+  const maxY = Math.max(0, (scaledHeight - container.height) / 2);
+  previewZoom.x = Math.max(-maxX, Math.min(maxX, previewZoom.x));
+  previewZoom.y = Math.max(-maxY, Math.min(maxY, previewZoom.y));
+}
+
+function applyPreviewTransform() {
+  if (!elements.previewImage) return;
+  if (previewZoom.mode === "touch") {
+    elements.previewImage.style.transformOrigin = "50% 50%";
+    elements.previewImage.style.transform = `translate(${previewZoom.x}px, ${previewZoom.y}px) scale(${previewZoom.scale})`;
+  } else if (previewZoom.mode === "mouse" && previewZoom.scale > 1) {
+    elements.previewImage.style.transform = `scale(${previewZoom.scale})`;
+  } else {
+    elements.previewImage.style.transform = "scale(1)";
+  }
+
+  if (elements.previewDrop) {
+    elements.previewDrop.classList.toggle(
+      "mouse-zoom",
+      previewZoom.mode === "mouse" && previewZoom.scale > 1
+    );
+    elements.previewDrop.classList.toggle(
+      "touch-zoom",
+      previewZoom.mode === "touch" && previewZoom.scale > 1
+    );
+  }
+}
+
+function setMouseZoomOrigin(event) {
+  if (!elements.previewImage || !elements.previewDrop) return;
+  if (previewZoom.mode !== "mouse" || previewZoom.scale <= 1) return;
+  const rect = elements.previewDrop.getBoundingClientRect();
+  const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+  elements.previewImage.style.transformOrigin = `${(x * 100).toFixed(2)}% ${(y * 100).toFixed(2)}%`;
+}
+
+function touchDistance(t1, t2) {
+  const dx = t2.clientX - t1.clientX;
+  const dy = t2.clientY - t1.clientY;
+  return Math.hypot(dx, dy);
+}
+
 function clearPreview() {
   elements.previewImage.src = "";
   elements.previewImage.style.display = "none";
   elements.previewPlaceholder.style.display = "block";
   elements.previewMeta.textContent = "Choose a photo to preview.";
-  if (elements.previewImage) elements.previewImage.classList.remove("zoomed");
-  if (elements.previewDrop) {
-    elements.previewDrop.classList.remove("zoomed");
-    elements.previewDrop.scrollTop = 0;
-    elements.previewDrop.scrollLeft = 0;
-  }
+  resetPreviewZoom();
 }
 
 function setPreview(file, metaText) {
@@ -637,15 +725,13 @@ function setPreview(file, metaText) {
   elements.previewImage.src = url;
   elements.previewImage.style.display = "block";
   elements.previewPlaceholder.style.display = "none";
-  elements.previewImage.classList.remove("zoomed");
-  if (elements.previewDrop) {
-    elements.previewDrop.classList.remove("zoomed");
-    elements.previewDrop.scrollTop = 0;
-    elements.previewDrop.scrollLeft = 0;
-  }
+  resetPreviewZoom();
   const name = file.name ? file.name : "receipt image";
   elements.previewMeta.textContent = metaText || `${name} · ${formatSize(file.size)}`;
-  elements.previewImage.onload = () => URL.revokeObjectURL(url);
+  elements.previewImage.onload = () => {
+    URL.revokeObjectURL(url);
+    updatePreviewBaseSize();
+  };
 }
 
 function resetOcrState() {
@@ -1375,58 +1461,108 @@ async function init() {
     });
   }
   if (elements.previewImage && elements.previewDrop) {
-    const updateZoomOrigin = (event) => {
-      if (!elements.previewImage.classList.contains("zoomed")) return;
-      const rect = elements.previewDrop.getBoundingClientRect();
-      const clientX = event.clientX ?? (event.touches && event.touches[0]?.clientX);
-      const clientY = event.clientY ?? (event.touches && event.touches[0]?.clientY);
-      if (clientX == null || clientY == null) return;
-      const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-      elements.previewImage.style.transformOrigin = `${(x * 100).toFixed(2)}% ${(y * 100).toFixed(2)}%`;
-    };
+    const isFinePointer = window.matchMedia && window.matchMedia("(pointer: fine)").matches;
 
-    const resetZoomOrigin = () => {
-      elements.previewImage.style.transformOrigin = "50% 50%";
-    };
-
-    elements.previewImage.addEventListener("click", () => {
+    elements.previewImage.addEventListener("click", (event) => {
+      if (!isFinePointer) return;
       if (elements.previewImage.style.display === "none") return;
-      const zoomed = elements.previewImage.classList.toggle("zoomed");
-      elements.previewDrop.classList.toggle("zoomed", zoomed);
-      if (!zoomed) resetZoomOrigin();
+      if (previewZoom.mode === "mouse" && previewZoom.scale > 1) {
+        previewZoom.mode = "none";
+        previewZoom.scale = 1;
+        elements.previewImage.style.transformOrigin = "50% 50%";
+        applyPreviewTransform();
+        return;
+      }
+      previewZoom.mode = "mouse";
+      previewZoom.scale = 2;
+      previewZoom.x = 0;
+      previewZoom.y = 0;
+      applyPreviewTransform();
+      setMouseZoomOrigin(event);
     });
 
     elements.previewDrop.addEventListener("mousemove", (event) => {
-      updateZoomOrigin(event);
+      setMouseZoomOrigin(event);
     });
 
     elements.previewDrop.addEventListener("mouseleave", () => {
-      resetZoomOrigin();
+      if (previewZoom.mode === "mouse") {
+        elements.previewImage.style.transformOrigin = "50% 50%";
+      }
     });
 
     elements.previewDrop.addEventListener(
-      "touchmove",
+      "touchstart",
       (event) => {
-        if (!elements.previewImage.classList.contains("zoomed")) return;
-        updateZoomOrigin(event);
-        event.preventDefault();
+        if (elements.previewImage.style.display === "none") return;
+        updatePreviewBaseSize();
+        if (event.touches.length === 2) {
+          previewZoom.mode = "touch";
+          previewZoom.isPinching = true;
+          previewZoom.isPanning = false;
+          previewZoom.startDist = touchDistance(event.touches[0], event.touches[1]);
+          previewZoom.startScale = previewZoom.scale;
+        } else if (event.touches.length === 1 && previewZoom.scale > 1) {
+          previewZoom.mode = "touch";
+          previewZoom.isPanning = true;
+          previewZoom.isPinching = false;
+          previewZoom.lastX = event.touches[0].clientX;
+          previewZoom.lastY = event.touches[0].clientY;
+        }
       },
       { passive: false }
     );
 
     elements.previewDrop.addEventListener(
-      "touchstart",
+      "touchmove",
       (event) => {
-        if (!elements.previewImage.classList.contains("zoomed")) return;
-        updateZoomOrigin(event);
+        if (previewZoom.mode !== "touch") return;
+        if (event.touches.length === 2 && previewZoom.isPinching) {
+          const dist = touchDistance(event.touches[0], event.touches[1]);
+          if (previewZoom.startDist > 0) {
+            const nextScale = previewZoom.startScale * (dist / previewZoom.startDist);
+            previewZoom.scale = Math.max(previewZoom.minScale, Math.min(previewZoom.maxScale, nextScale));
+            clampPreviewPan();
+            applyPreviewTransform();
+            event.preventDefault();
+          }
+          return;
+        }
+
+        if (event.touches.length === 1 && previewZoom.isPanning) {
+          const touch = event.touches[0];
+          const dx = touch.clientX - previewZoom.lastX;
+          const dy = touch.clientY - previewZoom.lastY;
+          previewZoom.x += dx;
+          previewZoom.y += dy;
+          previewZoom.lastX = touch.clientX;
+          previewZoom.lastY = touch.clientY;
+          clampPreviewPan();
+          applyPreviewTransform();
+          event.preventDefault();
+        }
       },
-      { passive: true }
+      { passive: false }
     );
 
-    elements.previewDrop.addEventListener("touchend", () => {
-      resetZoomOrigin();
-    });
+    const endTouch = (event) => {
+      if (event.touches.length < 2) {
+        previewZoom.isPinching = false;
+      }
+      if (event.touches.length === 0) {
+        previewZoom.isPanning = false;
+      }
+      if (previewZoom.scale <= 1.01) {
+        previewZoom.mode = "none";
+        previewZoom.scale = 1;
+        previewZoom.x = 0;
+        previewZoom.y = 0;
+        applyPreviewTransform();
+      }
+    };
+
+    elements.previewDrop.addEventListener("touchend", endTouch);
+    elements.previewDrop.addEventListener("touchcancel", endTouch);
   }
 
   elements.runOcr.addEventListener("click", runOcr);

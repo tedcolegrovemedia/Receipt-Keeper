@@ -344,16 +344,19 @@ body::before {
   cursor: zoom-in;
   transition: transform 0.15s ease;
   transform-origin: 50% 50%;
+  will-change: transform;
 }
 
-.preview-frame.zoomed {
+.preview-frame.mouse-zoom {
   cursor: zoom-out;
+}
+
+.preview-frame.mouse-zoom img {
+  cursor: zoom-out;
+}
+
+.preview-frame.touch-zoom {
   touch-action: none;
-}
-
-.preview-frame img.zoomed {
-  transform: scale(2);
-  cursor: zoom-out;
 }
 
 .preview-placeholder {
