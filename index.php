@@ -77,6 +77,7 @@ require_once __DIR__ . '/guard.php';
           <div class="preview">
             <div class="preview-frame" id="previewDrop">
               <img id="previewImage" alt="Receipt preview" />
+              <iframe id="previewPdf" title="Receipt PDF preview"></iframe>
               <div class="preview-placeholder" id="previewPlaceholder">
                 No image yet
               </div>

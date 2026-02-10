@@ -109,6 +109,7 @@ const ocrHighlightTimers = new WeakMap();
 const elements = {
   receiptImage: document.getElementById("receiptImage"),
   previewImage: document.getElementById("previewImage"),
+  previewPdf: document.getElementById("previewPdf"),
   previewPlaceholder: document.getElementById("previewPlaceholder"),
   previewHint: document.getElementById("previewHint"),
   ocrStatus: document.getElementById("ocrStatus"),
@@ -1175,6 +1176,10 @@ function setOcrStatus(message) {
 function clearPreview() {
   elements.previewImage.src = "";
   elements.previewImage.style.display = "none";
+  if (elements.previewPdf) {
+    elements.previewPdf.src = "";
+    elements.previewPdf.style.display = "none";
+  }
   elements.previewPlaceholder.style.display = "block";
   elements.previewPlaceholder.textContent = "No image yet";
   setPreviewMessage("Choose a photo to preview.");
@@ -1187,6 +1192,10 @@ function setPreview(file, metaText) {
   if (!file) {
     clearPreview();
     return;
+  }
+  if (elements.previewPdf) {
+    elements.previewPdf.src = "";
+    elements.previewPdf.style.display = "none";
   }
   const url = URL.createObjectURL(file);
   elements.previewImage.src = url;
@@ -1211,8 +1220,15 @@ function setPdfPreview(file, metaText) {
   }
   elements.previewImage.src = "";
   elements.previewImage.style.display = "none";
-  elements.previewPlaceholder.style.display = "block";
-  elements.previewPlaceholder.textContent = "PDF selected";
+  if (elements.previewPdf) {
+    const url = URL.createObjectURL(file);
+    elements.previewPdf.src = url;
+    elements.previewPdf.style.display = "block";
+    elements.previewPdf.onload = () => {
+      URL.revokeObjectURL(url);
+    };
+  }
+  elements.previewPlaceholder.style.display = "none";
   if (elements.previewHint) elements.previewHint.classList.add("hidden");
   resetPreviewZoom();
   const name = file.name ? file.name : "receipt PDF";
