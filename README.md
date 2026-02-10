@@ -65,10 +65,19 @@ PDF text extraction requires PDF.js. Download it into `vendor/pdfjs/`:
 
 ```
 vendor/pdfjs/pdf.min.mjs
+vendor/pdfjs/pdf.worker.mjs
+```
+
+Legacy `.mjs` and `.js` builds also work if you prefer them:
+
+```
 vendor/pdfjs/pdf.worker.min.mjs
 ```
 
-Legacy `.js` builds also work if you prefer them:
+```
+vendor/pdfjs/pdf.min.js
+vendor/pdfjs/pdf.worker.min.js
+```
 
 ```
 vendor/pdfjs/pdf.min.js

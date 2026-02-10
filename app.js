@@ -6,6 +6,10 @@ const OCR_MAX_DIM = 1600;
 const PDFJS_SOURCES = [
   {
     script: "vendor/pdfjs/pdf.min.mjs",
+    worker: "vendor/pdfjs/pdf.worker.mjs",
+  },
+  {
+    script: "vendor/pdfjs/pdf.min.mjs",
     worker: "vendor/pdfjs/pdf.worker.min.mjs",
   },
   {
@@ -688,7 +692,7 @@ async function loadPdfJs() {
   throw (
     lastError ||
     new Error(
-      "PDF reader unavailable. Add vendor/pdfjs/pdf.min.mjs and pdf.worker.min.mjs (or legacy .js builds)."
+      "PDF reader unavailable. Add vendor/pdfjs/pdf.min.mjs and pdf.worker.mjs (or legacy builds)."
     )
   );
 }
