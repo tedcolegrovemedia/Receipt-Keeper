@@ -21,22 +21,26 @@ const state = {
   modalReceipt: null,
 };
 
-const previewZoom = {
-  mode: "none",
-  scale: 1,
-  x: 0,
-  y: 0,
-  baseWidth: 0,
-  baseHeight: 0,
-  minScale: 1,
-  maxScale: 3,
-  isPinching: false,
-  isPanning: false,
-  startDist: 0,
-  startScale: 1,
-  lastX: 0,
-  lastY: 0,
-};
+function createZoomState() {
+  return {
+    mode: "none",
+    scale: 1,
+    x: 0,
+    y: 0,
+    baseWidth: 0,
+    baseHeight: 0,
+    minScale: 1,
+    maxScale: 3,
+    isPinching: false,
+    isPanning: false,
+    startDist: 0,
+    startScale: 1,
+    lastX: 0,
+    lastY: 0,
+  };
+}
+
+const previewZoom = createZoomState();
 
 const storage = {
   mode: "local",
@@ -411,6 +415,8 @@ function createBulkItem(file) {
     vendor: "",
     location: "",
     total: "",
+    ocrStatus: "",
+    ocrMessage: "",
     errors: [],
   };
 }
@@ -455,9 +461,13 @@ function renderBulkList() {
     const left = document.createElement("div");
     left.className = "bulk-left";
 
+    const previewFrame = document.createElement("div");
+    previewFrame.className = "bulk-preview-frame";
+
     const img = document.createElement("img");
     img.src = item.previewUrl;
     img.alt = `Queued receipt ${index + 1}`;
+    previewFrame.append(img);
 
     const fileInfo = document.createElement("div");
     const fileName = document.createElement("div");
@@ -467,7 +477,11 @@ function renderBulkList() {
     fileMeta.textContent = formatSize(item.file.size);
     fileInfo.append(fileName, fileMeta);
 
-    left.append(img, fileInfo);
+    left.append(previewFrame, fileInfo);
+
+    const zoomState = createZoomState();
+    resetPreviewZoom(zoomState, previewFrame, img);
+    attachZoomHandlers(previewFrame, img, zoomState);
 
     const actions = document.createElement("div");
     actions.className = "bulk-card-actions";
@@ -484,6 +498,14 @@ function renderBulkList() {
     actions.append(removeBtn);
 
     header.append(left, actions);
+
+    let ocrStatus = null;
+    if (item.ocrMessage) {
+      ocrStatus = document.createElement("div");
+      ocrStatus.className = "bulk-ocr-status";
+      ocrStatus.dataset.state = item.ocrStatus || "";
+      ocrStatus.textContent = item.ocrMessage;
+    }
 
     const fields = document.createElement("div");
     fields.className = "bulk-fields";
@@ -559,7 +581,11 @@ function renderBulkList() {
       errorMsg.textContent = `Missing: ${item.errors.join(", ")}`;
     }
 
-    card.append(header, fields, errorMsg);
+    if (ocrStatus) {
+      card.append(header, ocrStatus, fields, errorMsg);
+    } else {
+      card.append(header, fields, errorMsg);
+    }
     elements.bulkList.append(card);
   });
 }
@@ -572,6 +598,7 @@ async function addBulkFiles(files) {
   setBulkStatus(`Processing ${imageFiles.length} receipt${imageFiles.length === 1 ? "" : "s"}...`);
   let processedCount = 0;
   let failedCount = 0;
+  const ocrAvailable = storage.mode === "server" && storage.veryfiAvailable;
   for (const file of imageFiles) {
     let processed = file;
     try {
@@ -582,10 +609,42 @@ async function addBulkFiles(files) {
     }
     const item = createBulkItem(processed);
     item.originalName = file.name;
+    if (!ocrAvailable) {
+      item.ocrStatus = "skipped";
+      item.ocrMessage =
+        storage.mode === "server"
+          ? "OCR: Veryfi not configured."
+          : "OCR: unavailable in local mode.";
+    } else if (typeof storage.veryfiRemaining === "number" && storage.veryfiRemaining <= 0) {
+      item.ocrStatus = "skipped";
+      item.ocrMessage = "OCR: Veryfi limit reached.";
+    } else {
+      item.ocrStatus = "running";
+      item.ocrMessage = "OCR: running...";
+    }
     bulkState.items.push(item);
     processedCount += 1;
     renderBulkList();
     updateBulkControls();
+
+    if (item.ocrStatus === "running") {
+      try {
+        const suggestions = await runVeryfiOcrForFile(processed);
+        applyOcrToBulkItem(item, suggestions);
+        if (suggestions && Object.keys(suggestions).length > 0) {
+          item.ocrStatus = "applied";
+          item.ocrMessage = "OCR: applied.";
+        } else {
+          item.ocrStatus = "done";
+          item.ocrMessage = "OCR: no suggestions.";
+        }
+      } catch (error) {
+        item.ocrStatus = "failed";
+        item.ocrMessage = `OCR: ${error.message}`;
+      }
+      renderBulkList();
+      updateBulkControls();
+    }
   }
   if (failedCount > 0) {
     setBulkStatus(
@@ -632,80 +691,193 @@ async function saveBulkReceipts() {
   }
 }
 
-function resetPreviewZoom() {
-  previewZoom.mode = "none";
-  previewZoom.scale = 1;
-  previewZoom.x = 0;
-  previewZoom.y = 0;
-  previewZoom.isPinching = false;
-  previewZoom.isPanning = false;
-  previewZoom.startDist = 0;
-  previewZoom.startScale = 1;
-  previewZoom.lastX = 0;
-  previewZoom.lastY = 0;
-  if (elements.previewImage) {
-    elements.previewImage.style.transform = "scale(1)";
-    elements.previewImage.style.transformOrigin = "50% 50%";
+function resetPreviewZoom(state = previewZoom, frame = elements.previewDrop, img = elements.previewImage) {
+  state.mode = "none";
+  state.scale = 1;
+  state.x = 0;
+  state.y = 0;
+  state.isPinching = false;
+  state.isPanning = false;
+  state.startDist = 0;
+  state.startScale = 1;
+  state.lastX = 0;
+  state.lastY = 0;
+  if (img) {
+    img.style.transform = "scale(1)";
+    img.style.transformOrigin = "50% 50%";
   }
-  if (elements.previewDrop) {
-    elements.previewDrop.classList.remove("mouse-zoom", "touch-zoom");
+  if (frame) {
+    frame.classList.remove("mouse-zoom", "touch-zoom");
   }
 }
 
-function updatePreviewBaseSize() {
-  if (!elements.previewImage || elements.previewImage.style.display === "none") return;
-  const rect = elements.previewImage.getBoundingClientRect();
-  previewZoom.baseWidth = rect.width;
-  previewZoom.baseHeight = rect.height;
+function updatePreviewBaseSize(state = previewZoom, img = elements.previewImage) {
+  if (!img || img.style.display === "none") return;
+  const rect = img.getBoundingClientRect();
+  state.baseWidth = rect.width;
+  state.baseHeight = rect.height;
 }
 
-function clampPreviewPan() {
-  if (!elements.previewDrop) return;
-  const container = elements.previewDrop.getBoundingClientRect();
-  const scaledWidth = previewZoom.baseWidth * previewZoom.scale;
-  const scaledHeight = previewZoom.baseHeight * previewZoom.scale;
+function clampPreviewPan(state = previewZoom, frame = elements.previewDrop) {
+  if (!frame) return;
+  const container = frame.getBoundingClientRect();
+  const scaledWidth = state.baseWidth * state.scale;
+  const scaledHeight = state.baseHeight * state.scale;
   const maxX = Math.max(0, (scaledWidth - container.width) / 2);
   const maxY = Math.max(0, (scaledHeight - container.height) / 2);
-  previewZoom.x = Math.max(-maxX, Math.min(maxX, previewZoom.x));
-  previewZoom.y = Math.max(-maxY, Math.min(maxY, previewZoom.y));
+  state.x = Math.max(-maxX, Math.min(maxX, state.x));
+  state.y = Math.max(-maxY, Math.min(maxY, state.y));
 }
 
-function applyPreviewTransform() {
-  if (!elements.previewImage) return;
-  if (previewZoom.mode === "touch") {
-    elements.previewImage.style.transformOrigin = "50% 50%";
-    elements.previewImage.style.transform = `translate(${previewZoom.x}px, ${previewZoom.y}px) scale(${previewZoom.scale})`;
-  } else if (previewZoom.mode === "mouse" && previewZoom.scale > 1) {
-    elements.previewImage.style.transform = `scale(${previewZoom.scale})`;
+function applyPreviewTransform(
+  state = previewZoom,
+  frame = elements.previewDrop,
+  img = elements.previewImage
+) {
+  if (!img) return;
+  if (state.mode === "touch") {
+    img.style.transformOrigin = "50% 50%";
+    img.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
+  } else if (state.mode === "mouse" && state.scale > 1) {
+    img.style.transform = `scale(${state.scale})`;
   } else {
-    elements.previewImage.style.transform = "scale(1)";
+    img.style.transform = "scale(1)";
   }
 
-  if (elements.previewDrop) {
-    elements.previewDrop.classList.toggle(
-      "mouse-zoom",
-      previewZoom.mode === "mouse" && previewZoom.scale > 1
-    );
-    elements.previewDrop.classList.toggle(
-      "touch-zoom",
-      previewZoom.mode === "touch" && previewZoom.scale > 1
-    );
+  if (frame) {
+    frame.classList.toggle("mouse-zoom", state.mode === "mouse" && state.scale > 1);
+    frame.classList.toggle("touch-zoom", state.mode === "touch" && state.scale > 1);
   }
 }
 
-function setMouseZoomOrigin(event) {
-  if (!elements.previewImage || !elements.previewDrop) return;
-  if (previewZoom.mode !== "mouse" || previewZoom.scale <= 1) return;
-  const rect = elements.previewDrop.getBoundingClientRect();
+function setMouseZoomOrigin(
+  event,
+  state = previewZoom,
+  frame = elements.previewDrop,
+  img = elements.previewImage
+) {
+  if (!img || !frame) return;
+  if (state.mode !== "mouse" || state.scale <= 1) return;
+  const rect = frame.getBoundingClientRect();
   const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
   const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
-  elements.previewImage.style.transformOrigin = `${(x * 100).toFixed(2)}% ${(y * 100).toFixed(2)}%`;
+  img.style.transformOrigin = `${(x * 100).toFixed(2)}% ${(y * 100).toFixed(2)}%`;
 }
 
 function touchDistance(t1, t2) {
   const dx = t2.clientX - t1.clientX;
   const dy = t2.clientY - t1.clientY;
   return Math.hypot(dx, dy);
+}
+
+function attachZoomHandlers(frame, img, state) {
+  if (!frame || !img || !state) return;
+  const isFinePointer = window.matchMedia && window.matchMedia("(pointer: fine)").matches;
+  const syncBaseSize = () => updatePreviewBaseSize(state, img);
+
+  img.addEventListener("load", syncBaseSize);
+  requestAnimationFrame(syncBaseSize);
+
+  img.addEventListener("click", (event) => {
+    if (!isFinePointer) return;
+    if (img.style.display === "none") return;
+    if (state.mode === "mouse" && state.scale > 1) {
+      state.mode = "none";
+      state.scale = 1;
+      img.style.transformOrigin = "50% 50%";
+      applyPreviewTransform(state, frame, img);
+      return;
+    }
+    state.mode = "mouse";
+    state.scale = 2;
+    state.x = 0;
+    state.y = 0;
+    applyPreviewTransform(state, frame, img);
+    setMouseZoomOrigin(event, state, frame, img);
+  });
+
+  frame.addEventListener("mousemove", (event) => {
+    setMouseZoomOrigin(event, state, frame, img);
+  });
+
+  frame.addEventListener("mouseleave", () => {
+    if (state.mode === "mouse") {
+      img.style.transformOrigin = "50% 50%";
+    }
+  });
+
+  frame.addEventListener(
+    "touchstart",
+    (event) => {
+      if (img.style.display === "none") return;
+      updatePreviewBaseSize(state, img);
+      if (event.touches.length === 2) {
+        state.mode = "touch";
+        state.isPinching = true;
+        state.isPanning = false;
+        state.startDist = touchDistance(event.touches[0], event.touches[1]);
+        state.startScale = state.scale;
+      } else if (event.touches.length === 1 && state.scale > 1) {
+        state.mode = "touch";
+        state.isPanning = true;
+        state.isPinching = false;
+        state.lastX = event.touches[0].clientX;
+        state.lastY = event.touches[0].clientY;
+      }
+    },
+    { passive: false }
+  );
+
+  frame.addEventListener(
+    "touchmove",
+    (event) => {
+      if (state.mode !== "touch") return;
+      if (event.touches.length === 2 && state.isPinching) {
+        const dist = touchDistance(event.touches[0], event.touches[1]);
+        if (state.startDist > 0) {
+          const nextScale = state.startScale * (dist / state.startDist);
+          state.scale = Math.max(state.minScale, Math.min(state.maxScale, nextScale));
+          clampPreviewPan(state, frame);
+          applyPreviewTransform(state, frame, img);
+          event.preventDefault();
+        }
+        return;
+      }
+
+      if (event.touches.length === 1 && state.isPanning) {
+        const touch = event.touches[0];
+        const dx = touch.clientX - state.lastX;
+        const dy = touch.clientY - state.lastY;
+        state.x += dx;
+        state.y += dy;
+        state.lastX = touch.clientX;
+        state.lastY = touch.clientY;
+        clampPreviewPan(state, frame);
+        applyPreviewTransform(state, frame, img);
+        event.preventDefault();
+      }
+    },
+    { passive: false }
+  );
+
+  const endTouch = (event) => {
+    if (event.touches.length < 2) {
+      state.isPinching = false;
+    }
+    if (event.touches.length === 0) {
+      state.isPanning = false;
+    }
+    if (state.scale <= 1.01) {
+      state.mode = "none";
+      state.scale = 1;
+      state.x = 0;
+      state.y = 0;
+      applyPreviewTransform(state, frame, img);
+    }
+  };
+
+  frame.addEventListener("touchend", endTouch);
+  frame.addEventListener("touchcancel", endTouch);
 }
 
 function clearPreview() {
@@ -1045,6 +1217,33 @@ async function runVeryfiOcr() {
     updateVeryfiStatus();
   } finally {
     elements.runOcr.disabled = false;
+  }
+}
+
+async function runVeryfiOcrForFile(file) {
+  const formData = new FormData();
+  formData.append("image", file);
+  const data = await apiRequest("veryfi_ocr", { method: "POST", body: formData });
+  if (typeof data.veryfiRemaining === "number") {
+    storage.veryfiRemaining = data.veryfiRemaining;
+  }
+  if (typeof data.veryfiLimit === "number") {
+    storage.veryfiLimit = data.veryfiLimit;
+  }
+  updateVeryfiStatus();
+  return data.suggestions || null;
+}
+
+function applyOcrToBulkItem(item, suggestions) {
+  if (!suggestions) return;
+  if (suggestions.date) item.date = suggestions.date;
+  if (suggestions.vendor) item.vendor = suggestions.vendor;
+  if (suggestions.location) item.location = suggestions.location;
+  if (suggestions.total !== null && suggestions.total !== undefined) {
+    const value = Number(suggestions.total);
+    if (Number.isFinite(value)) {
+      item.total = value.toFixed(2);
+    }
   }
 }
 
@@ -1460,110 +1659,7 @@ async function init() {
       updateVeryfiStatus();
     });
   }
-  if (elements.previewImage && elements.previewDrop) {
-    const isFinePointer = window.matchMedia && window.matchMedia("(pointer: fine)").matches;
-
-    elements.previewImage.addEventListener("click", (event) => {
-      if (!isFinePointer) return;
-      if (elements.previewImage.style.display === "none") return;
-      if (previewZoom.mode === "mouse" && previewZoom.scale > 1) {
-        previewZoom.mode = "none";
-        previewZoom.scale = 1;
-        elements.previewImage.style.transformOrigin = "50% 50%";
-        applyPreviewTransform();
-        return;
-      }
-      previewZoom.mode = "mouse";
-      previewZoom.scale = 2;
-      previewZoom.x = 0;
-      previewZoom.y = 0;
-      applyPreviewTransform();
-      setMouseZoomOrigin(event);
-    });
-
-    elements.previewDrop.addEventListener("mousemove", (event) => {
-      setMouseZoomOrigin(event);
-    });
-
-    elements.previewDrop.addEventListener("mouseleave", () => {
-      if (previewZoom.mode === "mouse") {
-        elements.previewImage.style.transformOrigin = "50% 50%";
-      }
-    });
-
-    elements.previewDrop.addEventListener(
-      "touchstart",
-      (event) => {
-        if (elements.previewImage.style.display === "none") return;
-        updatePreviewBaseSize();
-        if (event.touches.length === 2) {
-          previewZoom.mode = "touch";
-          previewZoom.isPinching = true;
-          previewZoom.isPanning = false;
-          previewZoom.startDist = touchDistance(event.touches[0], event.touches[1]);
-          previewZoom.startScale = previewZoom.scale;
-        } else if (event.touches.length === 1 && previewZoom.scale > 1) {
-          previewZoom.mode = "touch";
-          previewZoom.isPanning = true;
-          previewZoom.isPinching = false;
-          previewZoom.lastX = event.touches[0].clientX;
-          previewZoom.lastY = event.touches[0].clientY;
-        }
-      },
-      { passive: false }
-    );
-
-    elements.previewDrop.addEventListener(
-      "touchmove",
-      (event) => {
-        if (previewZoom.mode !== "touch") return;
-        if (event.touches.length === 2 && previewZoom.isPinching) {
-          const dist = touchDistance(event.touches[0], event.touches[1]);
-          if (previewZoom.startDist > 0) {
-            const nextScale = previewZoom.startScale * (dist / previewZoom.startDist);
-            previewZoom.scale = Math.max(previewZoom.minScale, Math.min(previewZoom.maxScale, nextScale));
-            clampPreviewPan();
-            applyPreviewTransform();
-            event.preventDefault();
-          }
-          return;
-        }
-
-        if (event.touches.length === 1 && previewZoom.isPanning) {
-          const touch = event.touches[0];
-          const dx = touch.clientX - previewZoom.lastX;
-          const dy = touch.clientY - previewZoom.lastY;
-          previewZoom.x += dx;
-          previewZoom.y += dy;
-          previewZoom.lastX = touch.clientX;
-          previewZoom.lastY = touch.clientY;
-          clampPreviewPan();
-          applyPreviewTransform();
-          event.preventDefault();
-        }
-      },
-      { passive: false }
-    );
-
-    const endTouch = (event) => {
-      if (event.touches.length < 2) {
-        previewZoom.isPinching = false;
-      }
-      if (event.touches.length === 0) {
-        previewZoom.isPanning = false;
-      }
-      if (previewZoom.scale <= 1.01) {
-        previewZoom.mode = "none";
-        previewZoom.scale = 1;
-        previewZoom.x = 0;
-        previewZoom.y = 0;
-        applyPreviewTransform();
-      }
-    };
-
-    elements.previewDrop.addEventListener("touchend", endTouch);
-    elements.previewDrop.addEventListener("touchcancel", endTouch);
-  }
+  attachZoomHandlers(elements.previewDrop, elements.previewImage, previewZoom);
 
   elements.runOcr.addEventListener("click", runOcr);
   elements.applyOcr.addEventListener("click", applySuggestions);
