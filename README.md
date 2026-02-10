@@ -89,6 +89,9 @@ php -S 127.0.0.1:8000 -t public
 
 Open: `http://127.0.0.1:8000`
 
+## First-time Setup
+If `data/password.json` is missing, the app will redirect you to `/install` to set the admin password and (optionally) Veryfi credentials.
+
 ## Project Structure
 - `public/` web root (front controller, assets, PDF.js)
 - `app/Controllers/` request handlers

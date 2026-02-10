@@ -14,6 +14,10 @@ if ($path === '') {
     $path = '/';
 }
 
+if (needs_install() && $path !== '/install') {
+    redirect_to('install');
+}
+
 switch ($path) {
     case '/':
         (new HomeController())->index();
@@ -23,6 +27,9 @@ switch ($path) {
         break;
     case '/logout':
         (new AuthController())->logout();
+        break;
+    case '/install':
+        (new InstallController())->index();
         break;
     case '/change-password':
         (new AuthController())->changePassword();

@@ -6,6 +6,7 @@ const SESSION_NAME = 'receipts_session';
 const DATA_DIR = __DIR__ . '/../data';
 const PUBLIC_DIR = __DIR__ . '/../public';
 const PASSWORD_FILE = DATA_DIR . '/password.json';
+const LOCAL_CONFIG_FILE = __DIR__ . '/config.local.php';
 const ATTEMPTS_FILE = DATA_DIR . '/attempts.json';
 const RECEIPTS_FILE = DATA_DIR . '/receipts.json';
 const SQLITE_DB_FILE = DATA_DIR . '/receipts.sqlite';
@@ -16,7 +17,7 @@ const LOGIN_WINDOW_SECONDS = 900;
 const MIN_PASSWORD_LENGTH = 12;
 
 // Optional local secrets file (do not commit).
-$localConfig = __DIR__ . '/config.local.php';
+$localConfig = LOCAL_CONFIG_FILE;
 if (is_file($localConfig)) {
     require $localConfig;
 }

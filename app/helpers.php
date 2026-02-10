@@ -23,7 +23,12 @@ function url_path(string $path = ''): string
 
 function asset_path(string $path): string
 {
-    return url_path($path);
+  return url_path($path);
+}
+
+function needs_install(): bool
+{
+    return !is_file(PASSWORD_FILE);
 }
 
 function redirect_to(string $path): void
