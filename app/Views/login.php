@@ -1,47 +1,9 @@
-<?php
-declare(strict_types=1);
-
-require_once __DIR__ . '/guard.php';
-
-$error = '';
-$success = '';
-
-if (!data_store_available()) {
-    $error = 'Password store is not writable. Ensure the data/ folder is writable by the server.';
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
-    if (!verify_csrf_token($_POST['csrf_token'] ?? null)) {
-        $error = 'Session expired. Please refresh and try again.';
-    } else {
-        $current = $_POST['current_password'] ?? '';
-        $new = $_POST['new_password'] ?? '';
-        $confirm = $_POST['confirm_password'] ?? '';
-
-        if (!password_verify($current, get_password_hash())) {
-            $error = 'Current password is incorrect.';
-        } elseif (strlen($new) < MIN_PASSWORD_LENGTH) {
-            $error = 'New password is too short. Use at least ' . MIN_PASSWORD_LENGTH . ' characters.';
-        } elseif ($new !== $confirm) {
-            $error = 'New passwords do not match.';
-        } else {
-            $hash = password_hash($new, PASSWORD_DEFAULT);
-            if (!set_password_hash($hash)) {
-                $error = 'Could not update password. Check folder permissions.';
-            } else {
-                session_regenerate_id(true);
-                $success = 'Password updated.';
-            }
-        }
-    }
-}
-?>
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Change Password</title>
+    <title>Receipt Logger Login</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -91,10 +53,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
         z-index: 0;
       }
 
-      .card {
+      .login-card {
         position: relative;
         z-index: 1;
-        width: min(460px, 100%);
+        width: min(420px, 100%);
         background: var(--panel);
         border: 1px solid var(--line);
         border-radius: var(--radius);
@@ -130,6 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
         font-weight: 600;
       }
 
+      input[type="text"],
       input[type="password"] {
         border-radius: 12px;
         border: 1px solid var(--line);
@@ -155,25 +118,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
         box-shadow: 0 6px 12px rgba(47, 111, 101, 0.18);
       }
 
-      .btn.ghost {
-        background: transparent;
-        color: var(--accent-strong);
-      }
-
-      .actions {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-
       .error {
         color: var(--warning);
-        font-weight: 600;
-      }
-
-      .success {
-        color: var(--accent-strong);
         font-weight: 600;
       }
 
@@ -190,39 +136,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
     </style>
   </head>
   <body>
-    <form class="card" method="post" action="">
+    <form class="login-card" method="post" action="">
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
       <div>
         <p class="eyebrow">Receipt Logger</p>
-        <h1>Change password</h1>
-        <p>Use at least <?php echo MIN_PASSWORD_LENGTH; ?> characters.</p>
+        <h1>Sign in</h1>
+        <p>Enter your shared password to continue.</p>
       </div>
 
       <?php if ($error): ?>
       <div class="error"><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></div>
       <?php endif; ?>
 
-      <?php if ($success): ?>
-      <div class="success"><?php echo htmlspecialchars($success, ENT_QUOTES, 'UTF-8'); ?></div>
-      <?php endif; ?>
-
       <label>
-        Current password
-        <input type="password" name="current_password" autocomplete="current-password" required />
+        Username
+        <input type="text" name="username" autocomplete="username" required />
       </label>
       <label>
-        New password
-        <input type="password" name="new_password" autocomplete="new-password" required />
+        Password
+        <input type="password" name="password" autocomplete="current-password" required />
       </label>
-      <label>
-        Confirm new password
-        <input type="password" name="confirm_password" autocomplete="new-password" required />
-      </label>
-
-      <div class="actions">
-        <button class="btn" type="submit">Update password</button>
-        <a class="btn ghost" href="index.php">Back to app</a>
-      </div>
+      <button class="btn" type="submit">Sign in</button>
     </form>
   </body>
 </html>

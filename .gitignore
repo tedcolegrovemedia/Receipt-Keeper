@@ -1,5 +1,5 @@
 # Local secrets
-config.local.php
+config/config.local.php
 
 # App data (receipts, logs, uploads)
 data/*

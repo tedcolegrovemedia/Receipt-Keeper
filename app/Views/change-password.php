@@ -1,61 +1,9 @@
-<?php
-declare(strict_types=1);
-
-require_once __DIR__ . '/config.php';
-
-start_secure_session();
-
-if (!empty($_SESSION['authenticated'])) {
-    header('Location: index.php');
-    exit;
-}
-
-$error = '';
-$passwordReady = get_password_hash() !== '';
-if (!$passwordReady) {
-    $error = 'Password not set. Create data/password.json with a bcrypt hash before signing in.';
-}
-
-$ip = get_client_ip();
-$rateStatus = rate_limit_status($ip);
-if ($rateStatus['blocked']) {
-    $minutes = ceil($rateStatus['retry_after'] / 60);
-    $error = "Too many attempts. Try again in about {$minutes} minute(s).";
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!$passwordReady) {
-        // Password file not configured yet.
-    } elseif ($rateStatus['blocked']) {
-        // Do not process while rate limited.
-    } elseif (!verify_csrf_token($_POST['csrf_token'] ?? null)) {
-        $error = 'Session expired. Please refresh and try again.';
-    } else {
-        $username = trim($_POST['username'] ?? '');
-        $password = $_POST['password'] ?? '';
-
-        if ($username === APP_USERNAME && password_verify($password, get_password_hash())) {
-            session_regenerate_id(true);
-            $_SESSION['authenticated'] = true;
-            clear_failed_attempts($ip);
-            header('Location: index.php');
-            exit;
-        }
-
-        $attempts = register_failed_attempt($ip);
-        $remaining = max(0, MAX_LOGIN_ATTEMPTS - $attempts);
-        $error = $remaining > 0
-            ? "Invalid username or password. {$remaining} attempt(s) remaining."
-            : 'Too many attempts. Try again later.';
-    }
-}
-?>
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Receipt Logger Login</title>
+    <title>Change Password</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -105,10 +53,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         z-index: 0;
       }
 
-      .login-card {
+      .card {
         position: relative;
         z-index: 1;
-        width: min(420px, 100%);
+        width: min(460px, 100%);
         background: var(--panel);
         border: 1px solid var(--line);
         border-radius: var(--radius);
@@ -144,7 +92,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         font-weight: 600;
       }
 
-      input[type="text"],
       input[type="password"] {
         border-radius: 12px;
         border: 1px solid var(--line);
@@ -170,8 +117,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         box-shadow: 0 6px 12px rgba(47, 111, 101, 0.18);
       }
 
+      .btn.ghost {
+        background: transparent;
+        color: var(--accent-strong);
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
       .error {
         color: var(--warning);
+        font-weight: 600;
+      }
+
+      .success {
+        color: var(--accent-strong);
         font-weight: 600;
       }
 
@@ -188,27 +152,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
   </head>
   <body>
-    <form class="login-card" method="post" action="">
+    <form class="card" method="post" action="">
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
       <div>
         <p class="eyebrow">Receipt Logger</p>
-        <h1>Sign in</h1>
-        <p>Enter your shared password to continue.</p>
+        <h1>Change password</h1>
+        <p>Use at least <?php echo MIN_PASSWORD_LENGTH; ?> characters.</p>
       </div>
 
       <?php if ($error): ?>
       <div class="error"><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></div>
       <?php endif; ?>
 
+      <?php if ($success): ?>
+      <div class="success"><?php echo htmlspecialchars($success, ENT_QUOTES, 'UTF-8'); ?></div>
+      <?php endif; ?>
+
       <label>
-        Username
-        <input type="text" name="username" autocomplete="username" required />
+        Current password
+        <input type="password" name="current_password" autocomplete="current-password" required />
       </label>
       <label>
-        Password
-        <input type="password" name="password" autocomplete="current-password" required />
+        New password
+        <input type="password" name="new_password" autocomplete="new-password" required />
       </label>
-      <button class="btn" type="submit">Sign in</button>
+      <label>
+        Confirm new password
+        <input type="password" name="confirm_password" autocomplete="new-password" required />
+      </label>
+
+      <div class="actions">
+        <button class="btn" type="submit">Update password</button>
+        <a class="btn ghost" href="<?php echo htmlspecialchars(url_path(''), ENT_QUOTES, 'UTF-8'); ?>">Back to app</a>
+      </div>
     </form>
   </body>
 </html>

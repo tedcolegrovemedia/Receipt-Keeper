@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 const APP_USERNAME = 'admin';
 const SESSION_NAME = 'receipts_session';
-const DATA_DIR = __DIR__ . '/data';
+const DATA_DIR = __DIR__ . '/../data';
+const PUBLIC_DIR = __DIR__ . '/../public';
 const PASSWORD_FILE = DATA_DIR . '/password.json';
 const ATTEMPTS_FILE = DATA_DIR . '/attempts.json';
 const RECEIPTS_FILE = DATA_DIR . '/receipts.json';
@@ -586,5 +587,5 @@ function delete_receipt_by_id(string $id): bool
 
 function build_image_url(string $id): string
 {
-    return 'image.php?id=' . rawurlencode($id);
+    return 'image?id=' . rawurlencode($id);
 }

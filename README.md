@@ -11,7 +11,7 @@ A lightweight, self-hosted receipt logger with OCR, bulk upload, and CSV export.
 - Category required on every receipt
 - Year filtering, pagination, CSV export
 - Simple password-protected access
-- SQLite storage
+- SQLite storage (auto-fallback to JSON if unavailable)
 
 ## Requirements
 - PHP 8.0+ (tested on 8.x)
@@ -40,7 +40,7 @@ php -r 'echo json_encode(["hash" => password_hash("YOUR_PASSWORD", PASSWORD_DEFA
 Default username is `admin`.
 
 ### 3) (Optional) Configure Veryfi OCR
-Create `config.local.php` (this file is git-ignored) with your Veryfi credentials:
+Create `config/config.local.php` (this file is git-ignored) with your Veryfi credentials:
 
 ```php
 <?php
@@ -54,29 +54,29 @@ define('VERYFI_CLIENT_SECRET', 'YOUR_CLIENT_SECRET');
 
 If not configured, the app falls back to **local OCR** (Tesseract.js) in the browser.
 
-To disable OCR entirely, add this to `config.local.php`:
+To disable OCR entirely, add this to `config/config.local.php`:
 
 ```php
 define('OCR_DEFAULT_ENABLED', false);
 ```
 
 ### 4) (Optional) Local PDF text extraction
-PDF text extraction requires PDF.js. This repo includes the PDF.js files under `vendor/pdfjs/` by default. If you remove them, re-add these:
+PDF text extraction requires PDF.js. This repo includes the PDF.js files under `public/vendor/pdfjs/` by default. If you remove them, re-add these:
 
 ```
-vendor/pdfjs/pdf.min.mjs
-vendor/pdfjs/pdf.worker.mjs
+public/vendor/pdfjs/pdf.min.mjs
+public/vendor/pdfjs/pdf.worker.mjs
 ```
 
 Legacy `.mjs` and `.js` builds also work if you prefer them:
 
 ```
-vendor/pdfjs/pdf.worker.min.mjs
+public/vendor/pdfjs/pdf.worker.min.mjs
 ```
 
 ```
-vendor/pdfjs/pdf.min.js
-vendor/pdfjs/pdf.worker.min.js
+public/vendor/pdfjs/pdf.min.js
+public/vendor/pdfjs/pdf.worker.min.js
 ```
 
 If those files are missing, PDF uploads will fall back to Veryfi (when available) or skip OCR with a notice.
@@ -84,15 +84,22 @@ If those files are missing, PDF uploads will fall back to Veryfi (when available
 ## Run Locally
 
 ```bash
-php -S 127.0.0.1:8000 -t .
+php -S 127.0.0.1:8000 -t public
 ```
 
 Open: `http://127.0.0.1:8000`
 
+## Project Structure
+- `public/` web root (front controller, assets, PDF.js)
+- `app/Controllers/` request handlers
+- `app/Views/` templates
+- `config/` app config + local secrets
+- `data/` receipts, uploads, logs
+
 ## Production Notes
-- Place the app in a subfolder and protect with HTTPS if possible.
+- Point your web root to `public/` (recommended).
 - Ensure `data/` is writable and not publicly accessible.
-- Keep `config.local.php` and `data/password.json` out of version control.
+- Keep `config/config.local.php` and `data/password.json` out of version control.
 - If SQLite is not available on your host, the app will use `data/receipts.json` instead.
 
 ## OCR Notes

@@ -3,6 +3,14 @@ const STORE_NAME = "receipts";
 const DB_VERSION = 1;
 const PAGE_SIZE = 10;
 const OCR_MAX_DIM = 1600;
+const BASE_PATH = (document.body && document.body.dataset && document.body.dataset.base) || "";
+const buildPath = (path) => {
+  const base = BASE_PATH.replace(/\/+$/, "");
+  const clean = String(path || "").replace(/^\/+/, "");
+  if (!base) return clean;
+  return `${base}/${clean}`;
+};
+const API_BASE = buildPath("api");
 const PDFJS_SOURCES = [
   {
     script: "vendor/pdfjs/pdf.min.mjs",
@@ -439,7 +447,7 @@ async function initStorage() {
     return;
   }
   try {
-    const response = await fetch("api.php?action=ping", { credentials: "same-origin" });
+    const response = await fetch(`${API_BASE}?action=ping`, { credentials: "same-origin" });
     if (response.ok) {
       const data = await response.json();
       storage.mode = "server";
@@ -459,7 +467,7 @@ async function initStorage() {
 }
 
 async function apiRequest(action, options = {}) {
-  const response = await fetch(`api.php?action=${encodeURIComponent(action)}`, {
+  const response = await fetch(`${API_BASE}?action=${encodeURIComponent(action)}`, {
     credentials: "same-origin",
     ...options,
   });
@@ -831,7 +839,7 @@ async function loadPdfJs() {
   throw (
     lastError ||
     new Error(
-      "PDF reader unavailable. Add vendor/pdfjs/pdf.min.mjs and pdf.worker.mjs (or legacy builds)."
+      "PDF reader unavailable. Add public/vendor/pdfjs/pdf.min.mjs and pdf.worker.mjs (or legacy builds)."
     )
   );
 }
@@ -868,7 +876,7 @@ function logClientError(message, context = {}) {
     context: context && typeof context === "object" ? context : { value: String(context) },
     url: window.location.href,
   };
-  fetch("api.php?action=log", {
+  fetch(`${API_BASE}?action=log`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "same-origin",

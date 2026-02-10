@@ -1,7 +1,3 @@
-<?php
-declare(strict_types=1);
-require_once __DIR__ . '/guard.php';
-?>
 <!doctype html>
 <html lang="en">
   <head>
@@ -14,9 +10,9 @@ require_once __DIR__ . '/guard.php';
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_path('assets/styles.css'), ENT_QUOTES, 'UTF-8'); ?>" />
   </head>
-  <body>
+  <body data-base="<?php echo htmlspecialchars(base_path(), ENT_QUOTES, 'UTF-8'); ?>">
     <main class="app">
       <nav class="top-nav">
         <div class="nav-brand"></div>
@@ -24,8 +20,12 @@ require_once __DIR__ . '/guard.php';
           <button class="btn ghost small" id="themeToggle" type="button" aria-pressed="false">
             Dark mode
           </button>
-          <a class="btn ghost" href="change-password.php">Change password</a>
-          <a class="btn ghost" href="logout.php">Sign out</a>
+          <a class="btn ghost" href="<?php echo htmlspecialchars(url_path('change-password'), ENT_QUOTES, 'UTF-8'); ?>">
+            Change password
+          </a>
+          <a class="btn ghost" href="<?php echo htmlspecialchars(url_path('logout'), ENT_QUOTES, 'UTF-8'); ?>">
+            Sign out
+          </a>
         </div>
       </nav>
       <header class="hero">
@@ -277,7 +277,7 @@ require_once __DIR__ . '/guard.php';
       </div>
     </div>
 
-    <script src="ocr-parser.js"></script>
-    <script src="app.js"></script>
+    <script src="<?php echo htmlspecialchars(asset_path('assets/ocr-parser.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+    <script src="<?php echo htmlspecialchars(asset_path('assets/app.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
   </body>
 </html>
