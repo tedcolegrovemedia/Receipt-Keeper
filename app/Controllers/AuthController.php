@@ -12,7 +12,7 @@ class AuthController
         $error = '';
         $passwordReady = get_password_hash() !== '';
         if (!$passwordReady) {
-            $error = 'Password not set. Create data/password.json with a bcrypt hash before signing in.';
+            $error = 'Password not set. Visit /install to complete setup.';
         }
 
         $ip = get_client_ip();

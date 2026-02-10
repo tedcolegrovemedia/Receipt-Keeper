@@ -10,20 +10,40 @@ class InstallController
         }
 
         $error = '';
+        $availability = [
+            'sqlite' => sqlite_available(),
+            'mysql' => mysql_available(),
+        ];
+        $defaultMode = $availability['sqlite'] ? 'sqlite' : 'json';
         $values = [
+            'storage_mode' => $defaultMode,
             'veryfi_client_id' => '',
             'veryfi_client_secret' => '',
             'veryfi_username' => '',
             'veryfi_api_key' => '',
+            'mysql_host' => '',
+            'mysql_port' => '3306',
+            'mysql_database' => '',
+            'mysql_username' => '',
+            'mysql_password' => '',
         ];
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $values = [
+                'storage_mode' => trim((string) ($_POST['storage_mode'] ?? $defaultMode)),
                 'veryfi_client_id' => trim((string) ($_POST['veryfi_client_id'] ?? '')),
                 'veryfi_client_secret' => trim((string) ($_POST['veryfi_client_secret'] ?? '')),
                 'veryfi_username' => trim((string) ($_POST['veryfi_username'] ?? '')),
                 'veryfi_api_key' => trim((string) ($_POST['veryfi_api_key'] ?? '')),
+                'mysql_host' => trim((string) ($_POST['mysql_host'] ?? '')),
+                'mysql_port' => trim((string) ($_POST['mysql_port'] ?? '3306')),
+                'mysql_database' => trim((string) ($_POST['mysql_database'] ?? '')),
+                'mysql_username' => trim((string) ($_POST['mysql_username'] ?? '')),
+                'mysql_password' => (string) ($_POST['mysql_password'] ?? ''),
             ];
+            if (!in_array($values['storage_mode'], ['json', 'sqlite', 'mysql'], true)) {
+                $values['storage_mode'] = $defaultMode;
+            }
 
             if (!verify_csrf_token($_POST['csrf_token'] ?? null)) {
                 $error = 'Session expired. Please refresh and try again.';
@@ -36,6 +56,19 @@ class InstallController
                     $error = 'Password is too short. Use at least ' . MIN_PASSWORD_LENGTH . ' characters.';
                 } elseif ($password !== $confirm) {
                     $error = 'Passwords do not match.';
+                } elseif ($values['storage_mode'] === 'sqlite' && !$availability['sqlite']) {
+                    $error = 'SQLite is not available on this server.';
+                } elseif ($values['storage_mode'] === 'mysql') {
+                    if (!$availability['mysql']) {
+                        $error = 'MySQL is not available on this server.';
+                    } elseif ($values['mysql_host'] === '' || $values['mysql_database'] === '' || $values['mysql_username'] === '') {
+                        $error = 'MySQL host, database, and username are required.';
+                    } else {
+                        $mysqlError = $this->testMysqlConnection($values);
+                        if ($mysqlError !== '') {
+                            $error = $mysqlError;
+                        }
+                    }
                 } else {
                     $hash = password_hash($password, PASSWORD_DEFAULT);
                     if (!set_password_hash($hash)) {
@@ -54,6 +87,7 @@ class InstallController
             'error' => $error,
             'values' => $values,
             'minLength' => MIN_PASSWORD_LENGTH,
+            'availability' => $availability,
         ]);
     }
 
@@ -68,6 +102,17 @@ class InstallController
             'declare(strict_types=1);',
             '',
         ];
+
+        $lines[] = "define('STORAGE_MODE', " . var_export($values['storage_mode'] ?? 'auto', true) . ');';
+
+        if (($values['storage_mode'] ?? '') === 'mysql') {
+            $lines[] = "define('MYSQL_HOST', " . var_export($values['mysql_host'] ?? '', true) . ');';
+            $lines[] = "define('MYSQL_PORT', " . var_export((int) ($values['mysql_port'] ?? 3306), true) . ');';
+            $lines[] = "define('MYSQL_DATABASE', " . var_export($values['mysql_database'] ?? '', true) . ');';
+            $lines[] = "define('MYSQL_USERNAME', " . var_export($values['mysql_username'] ?? '', true) . ');';
+            $lines[] = "define('MYSQL_PASSWORD', " . var_export($values['mysql_password'] ?? '', true) . ');';
+            $lines[] = '';
+        }
 
         $hasVeryfi = false;
         foreach (['veryfi_client_id', 'veryfi_client_secret', 'veryfi_username', 'veryfi_api_key'] as $key) {
@@ -88,5 +133,29 @@ class InstallController
 
         $payload = implode(PHP_EOL, $lines) . PHP_EOL;
         @file_put_contents(LOCAL_CONFIG_FILE, $payload, LOCK_EX);
+    }
+
+    private function testMysqlConnection(array $values): string
+    {
+        $host = $values['mysql_host'] ?? '';
+        $database = $values['mysql_database'] ?? '';
+        $username = $values['mysql_username'] ?? '';
+        $password = $values['mysql_password'] ?? '';
+        $port = (int) ($values['mysql_port'] ?? 3306);
+        if ($port <= 0) {
+            $port = 3306;
+        }
+        try {
+            $dsn = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $host, $port, $database);
+            $db = new PDO($dsn, $username, $password, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+            ]);
+            init_receipts_mysql_db($db);
+        } catch (Throwable $error) {
+            return 'Could not connect to MySQL. ' . $error->getMessage();
+        }
+        return '';
     }
 }

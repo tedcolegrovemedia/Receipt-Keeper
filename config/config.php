@@ -37,6 +37,24 @@ if (!defined('VERYFI_CLIENT_SECRET')) {
 if (!defined('OCR_DEFAULT_ENABLED')) {
     define('OCR_DEFAULT_ENABLED', true);
 }
+if (!defined('STORAGE_MODE')) {
+    define('STORAGE_MODE', 'auto');
+}
+if (!defined('MYSQL_HOST')) {
+    define('MYSQL_HOST', '');
+}
+if (!defined('MYSQL_PORT')) {
+    define('MYSQL_PORT', 3306);
+}
+if (!defined('MYSQL_DATABASE')) {
+    define('MYSQL_DATABASE', '');
+}
+if (!defined('MYSQL_USERNAME')) {
+    define('MYSQL_USERNAME', '');
+}
+if (!defined('MYSQL_PASSWORD')) {
+    define('MYSQL_PASSWORD', '');
+}
 const VERYFI_ENDPOINT = 'https://api.veryfi.com/api/v8/partner/documents';
 const VERYFI_MONTHLY_LIMIT = 100;
 const VERYFI_USAGE_FILE = DATA_DIR . '/veryfi-usage.json';
@@ -198,24 +216,27 @@ function sqlite_available(): bool
     return in_array('sqlite', $drivers, true);
 }
 
-function receipts_use_sqlite(): bool
+function mysql_available(): bool
 {
-    static $useSqlite = null;
-    if ($useSqlite !== null) {
-        return $useSqlite;
-    }
-    if (!sqlite_available()) {
-        $useSqlite = false;
+    if (!class_exists('PDO')) {
         return false;
     }
-    try {
-        $db = get_db();
-        init_receipts_db($db);
-        $useSqlite = true;
-    } catch (Throwable $error) {
-        $useSqlite = false;
+    $drivers = PDO::getAvailableDrivers();
+    return in_array('mysql', $drivers, true);
+}
+
+function mysql_configured(): bool
+{
+    return MYSQL_HOST !== '' && MYSQL_DATABASE !== '' && MYSQL_USERNAME !== '';
+}
+
+function storage_mode(): string
+{
+    $mode = strtolower(trim((string) STORAGE_MODE));
+    if (!in_array($mode, ['auto', 'json', 'sqlite', 'mysql'], true)) {
+        return 'auto';
     }
-    return $useSqlite;
+    return $mode;
 }
 
 function get_db(): PDO
@@ -231,6 +252,36 @@ function get_db(): PDO
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $db->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     $db->exec('PRAGMA journal_mode = WAL');
+    return $db;
+}
+
+function get_mysql_db(): PDO
+{
+    static $db = null;
+    if ($db instanceof PDO) {
+        return $db;
+    }
+    if (!mysql_available()) {
+        throw new RuntimeException('MySQL is not available.');
+    }
+    if (!mysql_configured()) {
+        throw new RuntimeException('MySQL is not configured.');
+    }
+    $port = (int) MYSQL_PORT;
+    if ($port <= 0) {
+        $port = 3306;
+    }
+    $dsn = sprintf(
+        'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
+        MYSQL_HOST,
+        $port,
+        MYSQL_DATABASE
+    );
+    $db = new PDO($dsn, MYSQL_USERNAME, MYSQL_PASSWORD, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ]);
     return $db;
 }
 
@@ -314,6 +365,167 @@ function migrate_receipts_from_json(PDO $db): void
     }
 }
 
+function init_receipts_mysql_db(PDO $db): void
+{
+    $db->exec(
+        'CREATE TABLE IF NOT EXISTS receipts (
+            id VARCHAR(64) PRIMARY KEY,
+            date VARCHAR(32) NOT NULL DEFAULT "",
+            vendor VARCHAR(255) NOT NULL DEFAULT "",
+            location VARCHAR(255) NOT NULL DEFAULT "",
+            category VARCHAR(255) NOT NULL DEFAULT "",
+            business_purpose VARCHAR(255) NOT NULL DEFAULT "",
+            total DECIMAL(10,2) NOT NULL DEFAULT 0,
+            created_at VARCHAR(32) NOT NULL DEFAULT "",
+            image_file VARCHAR(255) NOT NULL DEFAULT ""
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+    );
+}
+
+function migrate_receipts_from_json_to_mysql(PDO $db): void
+{
+    if (!is_file(RECEIPTS_FILE)) {
+        return;
+    }
+    $raw = file_get_contents(RECEIPTS_FILE);
+    if ($raw === false || trim($raw) === '') {
+        return;
+    }
+    $data = json_decode($raw, true);
+    if (!is_array($data) || $data === []) {
+        return;
+    }
+
+    $stmt = $db->prepare(
+        'INSERT INTO receipts (id, date, vendor, location, category, business_purpose, total, created_at, image_file)
+         VALUES (:id, :date, :vendor, :location, :category, :business_purpose, :total, :created_at, :image_file)
+         ON DUPLICATE KEY UPDATE
+            date = VALUES(date),
+            vendor = VALUES(vendor),
+            location = VALUES(location),
+            category = VALUES(category),
+            business_purpose = VALUES(business_purpose),
+            total = VALUES(total),
+            created_at = VALUES(created_at),
+            image_file = VALUES(image_file)'
+    );
+
+    foreach ($data as $receipt) {
+        if (!is_array($receipt)) {
+            continue;
+        }
+        $id = isset($receipt['id']) ? trim((string) $receipt['id']) : '';
+        if ($id === '') {
+            continue;
+        }
+        $stmt->execute([
+            ':id' => $id,
+            ':date' => isset($receipt['date']) ? (string) $receipt['date'] : '',
+            ':vendor' => isset($receipt['vendor']) ? (string) $receipt['vendor'] : '',
+            ':location' => isset($receipt['location']) ? (string) $receipt['location'] : '',
+            ':category' => isset($receipt['category']) ? (string) $receipt['category'] : '',
+            ':business_purpose' => isset($receipt['businessPurpose']) ? (string) $receipt['businessPurpose'] : (isset($receipt['business_purpose']) ? (string) $receipt['business_purpose'] : ''),
+            ':total' => isset($receipt['total']) ? (float) $receipt['total'] : 0.0,
+            ':created_at' => isset($receipt['createdAt']) ? (string) $receipt['createdAt'] : gmdate('c'),
+            ':image_file' => isset($receipt['imageFile']) ? (string) $receipt['imageFile'] : '',
+        ]);
+    }
+}
+
+function sqlite_init_ok(): bool
+{
+    static $ok = null;
+    if ($ok !== null) {
+        return $ok;
+    }
+    if (!sqlite_available()) {
+        $ok = false;
+        return $ok;
+    }
+    try {
+        $dbExists = is_file(SQLITE_DB_FILE);
+        $db = get_db();
+        init_receipts_db($db);
+        if (!$dbExists) {
+            migrate_receipts_from_json($db);
+        }
+        $ok = true;
+        return $ok;
+    } catch (Throwable $error) {
+        $ok = false;
+        return $ok;
+    }
+}
+
+function mysql_init_ok(): bool
+{
+    static $ok = null;
+    if ($ok !== null) {
+        return $ok;
+    }
+    if (!mysql_available() || !mysql_configured()) {
+        $ok = false;
+        return $ok;
+    }
+    try {
+        $db = get_mysql_db();
+        init_receipts_mysql_db($db);
+        migrate_receipts_from_json_to_mysql($db);
+        $ok = true;
+        return $ok;
+    } catch (Throwable $error) {
+        $ok = false;
+        return $ok;
+    }
+}
+
+function storage_driver(): string
+{
+    static $driver = null;
+    if ($driver !== null) {
+        return $driver;
+    }
+
+    $mode = storage_mode();
+    if ($mode === 'json') {
+        $driver = 'json';
+        return $driver;
+    }
+
+    if ($mode === 'sqlite') {
+        $driver = sqlite_init_ok() ? 'sqlite' : 'json';
+        return $driver;
+    }
+
+    if ($mode === 'mysql') {
+        $driver = mysql_init_ok() ? 'mysql' : 'json';
+        return $driver;
+    }
+
+    if (mysql_init_ok()) {
+        $driver = 'mysql';
+        return $driver;
+    }
+
+    if (sqlite_init_ok()) {
+        $driver = 'sqlite';
+        return $driver;
+    }
+
+    $driver = 'json';
+    return $driver;
+}
+
+function receipts_use_sqlite(): bool
+{
+    return storage_driver() === 'sqlite';
+}
+
+function receipts_use_mysql(): bool
+{
+    return storage_driver() === 'mysql';
+}
+
 function ensure_storage_ready(): bool
 {
     if (!is_dir(DATA_DIR)) {
@@ -325,18 +537,26 @@ function ensure_storage_ready(): bool
         }
     }
 
-    if (receipts_use_sqlite()) {
-        $dbExists = is_file(SQLITE_DB_FILE);
-        try {
-            $db = get_db();
-            init_receipts_db($db);
-            if (!$dbExists) {
-                migrate_receipts_from_json($db);
-            }
-        } catch (Throwable $error) {
+    $mode = storage_mode();
+    if ($mode === 'sqlite') {
+        if (!sqlite_init_ok()) {
             return false;
         }
         return is_writable(DATA_DIR) && is_writable(UPLOADS_DIR) && is_writable(SQLITE_DB_FILE);
+    }
+    if ($mode === 'mysql') {
+        if (!mysql_init_ok()) {
+            return false;
+        }
+        return data_store_available() && is_writable(UPLOADS_DIR);
+    }
+
+    $driver = storage_driver();
+    if ($driver === 'sqlite') {
+        return is_writable(DATA_DIR) && is_writable(UPLOADS_DIR) && is_writable(SQLITE_DB_FILE);
+    }
+    if ($driver === 'mysql') {
+        return data_store_available() && is_writable(UPLOADS_DIR);
     }
 
     return data_store_available() && is_writable(UPLOADS_DIR);
@@ -461,6 +681,13 @@ function save_receipts_json(array $receipts): bool
 
 function fetch_all_receipts(): array
 {
+    if (receipts_use_mysql()) {
+        $db = get_mysql_db();
+        $stmt = $db->query('SELECT id, date, vendor, location, category, business_purpose, total, created_at, image_file FROM receipts ORDER BY date DESC, created_at DESC');
+        $rows = $stmt ? $stmt->fetchAll() : [];
+        return array_map('map_receipt_row', $rows ?: []);
+    }
+
     if (receipts_use_sqlite()) {
         $db = get_db();
         $stmt = $db->query('SELECT id, date, vendor, location, category, business_purpose, total, created_at, image_file FROM receipts ORDER BY date DESC, created_at DESC');
@@ -491,6 +718,17 @@ function fetch_all_receipts(): array
 
 function fetch_receipt_by_id(string $id): ?array
 {
+    if (receipts_use_mysql()) {
+        $db = get_mysql_db();
+        $stmt = $db->prepare('SELECT id, date, vendor, location, category, business_purpose, total, created_at, image_file FROM receipts WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            return null;
+        }
+        return map_receipt_row($row);
+    }
+
     if (receipts_use_sqlite()) {
         $db = get_db();
         $stmt = $db->prepare('SELECT id, date, vendor, location, category, business_purpose, total, created_at, image_file FROM receipts WHERE id = :id LIMIT 1');
@@ -516,6 +754,34 @@ function fetch_receipt_by_id(string $id): ?array
 
 function upsert_receipt(array $record): bool
 {
+    if (receipts_use_mysql()) {
+        $db = get_mysql_db();
+        $stmt = $db->prepare(
+            'INSERT INTO receipts (id, date, vendor, location, category, business_purpose, total, created_at, image_file)
+             VALUES (:id, :date, :vendor, :location, :category, :business_purpose, :total, :created_at, :image_file)
+             ON DUPLICATE KEY UPDATE
+                date = VALUES(date),
+                vendor = VALUES(vendor),
+                location = VALUES(location),
+                category = VALUES(category),
+                business_purpose = VALUES(business_purpose),
+                total = VALUES(total),
+                created_at = VALUES(created_at),
+                image_file = VALUES(image_file)'
+        );
+        return $stmt->execute([
+            ':id' => $record['id'] ?? '',
+            ':date' => $record['date'] ?? '',
+            ':vendor' => $record['vendor'] ?? '',
+            ':location' => $record['location'] ?? '',
+            ':category' => $record['category'] ?? '',
+            ':business_purpose' => $record['businessPurpose'] ?? '',
+            ':total' => $record['total'] ?? 0,
+            ':created_at' => $record['createdAt'] ?? '',
+            ':image_file' => $record['imageFile'] ?? '',
+        ]);
+    }
+
     if (receipts_use_sqlite()) {
         $db = get_db();
         $stmt = $db->prepare(
@@ -560,6 +826,13 @@ function upsert_receipt(array $record): bool
 
 function delete_receipt_by_id(string $id): bool
 {
+    if (receipts_use_mysql()) {
+        $db = get_mysql_db();
+        $stmt = $db->prepare('DELETE FROM receipts WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+        return $stmt->rowCount() > 0;
+    }
+
     if (receipts_use_sqlite()) {
         $db = get_db();
         $stmt = $db->prepare('DELETE FROM receipts WHERE id = :id');

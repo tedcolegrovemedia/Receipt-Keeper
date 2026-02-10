@@ -11,11 +11,12 @@ A lightweight, self-hosted receipt logger with OCR, bulk upload, and CSV export.
 - Category required on every receipt
 - Year filtering, pagination, CSV export
 - Simple password-protected access
-- SQLite storage (auto-fallback to JSON if unavailable)
+- SQLite/MySQL/JSON storage (auto-fallback available)
 
 ## Requirements
 - PHP 8.0+ (tested on 8.x)
 - `pdo_sqlite` enabled (optional; falls back to JSON if unavailable)
+- `pdo_mysql` enabled (optional; needed for MySQL storage)
 - Web server (Apache / Nginx) or PHP built-in server for local testing
 
 ## Setup
@@ -81,6 +82,24 @@ public/vendor/pdfjs/pdf.worker.min.js
 
 If those files are missing, PDF uploads will fall back to Veryfi (when available) or skip OCR with a notice.
 
+### 5) (Optional) Configure MySQL storage
+If you prefer MySQL, add these to `config/config.local.php` (or use the installer):
+
+```php
+define('STORAGE_MODE', 'mysql');
+define('MYSQL_HOST', 'localhost');
+define('MYSQL_PORT', 3306);
+define('MYSQL_DATABASE', 'receipt_keeper');
+define('MYSQL_USERNAME', 'db_user');
+define('MYSQL_PASSWORD', 'db_pass');
+```
+
+To force JSON or SQLite:
+
+```php
+define('STORAGE_MODE', 'json');   // or 'sqlite'
+```
+
 ## Run Locally
 
 ```bash
@@ -91,6 +110,11 @@ Open: `http://127.0.0.1:8000`
 
 ## First-time Setup
 If `data/password.json` is missing, the app will redirect you to `/install` to set the admin password and (optionally) Veryfi credentials.
+
+The installer also lets you pick storage:
+- JSON (default, always available)
+- SQLite (if `pdo_sqlite` is enabled)
+- MySQL (if `pdo_mysql` is enabled and credentials are provided)
 
 ## Project Structure
 - `public/` web root (front controller, assets, PDF.js)

@@ -22,7 +22,7 @@ class ApiController
                 $this->respond([
                     'ok' => true,
                     'mode' => 'server',
-                    'storage' => receipts_use_sqlite() ? 'sqlite' : 'json',
+                    'storage' => storage_driver(),
                     'veryfi' => $configured,
                     'ocrDefaultEnabled' => OCR_DEFAULT_ENABLED,
                     'pdfJsAvailable' => $this->pdfJsAvailable(),

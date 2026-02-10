@@ -90,6 +90,30 @@
         gap: 12px;
       }
 
+      fieldset {
+        border: 1px solid var(--line);
+        padding: 12px;
+        background: #fffdf9;
+        display: grid;
+        gap: 10px;
+      }
+
+      legend {
+        font-weight: 600;
+        padding: 0 6px;
+      }
+
+      .option {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        font-weight: 600;
+      }
+
+      .option input {
+        margin: 0;
+      }
+
       label {
         display: grid;
         gap: 8px;
@@ -179,6 +203,68 @@
           <input type="password" name="confirm_password" autocomplete="new-password" required />
         </label>
       </div>
+
+      <fieldset>
+        <legend>Storage</legend>
+        <label class="option">
+          <input
+            type="radio"
+            name="storage_mode"
+            value="json"
+            <?php echo ($values['storage_mode'] ?? '') === 'json' ? 'checked' : ''; ?>
+          />
+          JSON (works everywhere)
+        </label>
+        <label class="option">
+          <input
+            type="radio"
+            name="storage_mode"
+            value="sqlite"
+            <?php echo ($values['storage_mode'] ?? '') === 'sqlite' ? 'checked' : ''; ?>
+          />
+          SQLite (if available)
+        </label>
+        <label class="option">
+          <input
+            type="radio"
+            name="storage_mode"
+            value="mysql"
+            <?php echo ($values['storage_mode'] ?? '') === 'mysql' ? 'checked' : ''; ?>
+          />
+          MySQL
+        </label>
+        <p class="hint">
+          Detected on this server: SQLite available: <?php echo !empty($availability['sqlite']) ? 'yes' : 'no'; ?>.
+          MySQL driver available: <?php echo !empty($availability['mysql']) ? 'yes' : 'no'; ?>.
+        </p>
+      </fieldset>
+
+      <details>
+        <summary>MySQL settings (required if MySQL selected)</summary>
+        <div class="grid" style="margin-top: 12px;">
+          <label>
+            Host
+            <input type="text" name="mysql_host" value="<?php echo htmlspecialchars($values['mysql_host'], ENT_QUOTES, 'UTF-8'); ?>" />
+          </label>
+          <label>
+            Port
+            <input type="text" name="mysql_port" value="<?php echo htmlspecialchars($values['mysql_port'], ENT_QUOTES, 'UTF-8'); ?>" />
+          </label>
+          <label>
+            Database
+            <input type="text" name="mysql_database" value="<?php echo htmlspecialchars($values['mysql_database'], ENT_QUOTES, 'UTF-8'); ?>" />
+          </label>
+          <label>
+            Username
+            <input type="text" name="mysql_username" value="<?php echo htmlspecialchars($values['mysql_username'], ENT_QUOTES, 'UTF-8'); ?>" />
+          </label>
+          <label>
+            Password
+            <input type="password" name="mysql_password" value="<?php echo htmlspecialchars($values['mysql_password'], ENT_QUOTES, 'UTF-8'); ?>" />
+          </label>
+          <p class="hint">Make sure the database exists and the user has create/update permissions.</p>
+        </div>
+      </details>
 
       <details>
         <summary>Veryfi OCR (optional)</summary>
