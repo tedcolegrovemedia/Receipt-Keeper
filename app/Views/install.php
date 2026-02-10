@@ -239,7 +239,7 @@
         </p>
       </fieldset>
 
-      <details>
+      <details id="mysqlDetails">
         <summary>MySQL settings (required if MySQL selected)</summary>
         <div class="grid" style="margin-top: 12px;">
           <label>
@@ -267,7 +267,7 @@
       </details>
 
       <details>
-        <summary>Veryfi OCR (optional)</summary>
+        <summary>Veryfi OCR (optional but suggested for accuracy)</summary>
         <div class="grid" style="margin-top: 12px;">
           <label>
             Client ID
@@ -285,11 +285,31 @@
             API Key
             <input type="text" name="veryfi_api_key" value="<?php echo htmlspecialchars($values['veryfi_api_key'], ENT_QUOTES, 'UTF-8'); ?>" />
           </label>
-          <p class="hint">Leave blank to use local OCR only. You can edit `config/config.local.php` later.</p>
+          <p class="hint">
+            Learn more at <a href="https://www.veryfi.com/" target="_blank" rel="noopener">veryfi.com</a>.
+            Leave blank to use local OCR only. You can edit `config/config.local.php` later.
+          </p>
         </div>
       </details>
 
       <button class="btn" type="submit">Complete setup</button>
     </form>
+    <script>
+      (function () {
+        const details = document.getElementById("mysqlDetails");
+        if (!details) return;
+        const radios = Array.from(document.querySelectorAll('input[name="storage_mode"]'));
+        const update = () => {
+          const selected = radios.find((radio) => radio.checked);
+          const isMysql = selected && selected.value === "mysql";
+          details.open = Boolean(isMysql);
+          details.hidden = !isMysql;
+        };
+        radios.forEach((radio) => {
+          radio.addEventListener("change", update);
+        });
+        update();
+      })();
+    </script>
   </body>
 </html>
