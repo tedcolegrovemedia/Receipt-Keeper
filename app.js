@@ -5,6 +5,10 @@ const PAGE_SIZE = 10;
 const OCR_MAX_DIM = 1600;
 const PDFJS_SOURCES = [
   {
+    script: "vendor/pdfjs/pdf.min.mjs",
+    worker: "vendor/pdfjs/pdf.worker.min.mjs",
+  },
+  {
     script: "vendor/pdfjs/pdf.min.js",
     worker: "vendor/pdfjs/pdf.worker.min.js",
   },
@@ -603,14 +607,39 @@ function loadScript(src) {
   });
 }
 
+function resolveAssetUrl(path) {
+  try {
+    return new URL(path, window.location.href).href;
+  } catch (error) {
+    return path;
+  }
+}
+
+async function loadPdfModule(src) {
+  const module = await import(src);
+  if (module && module.default && module.default.getDocument) {
+    return module.default;
+  }
+  return module;
+}
+
 async function loadPdfJs() {
   if (state.pdfLoaded) return;
   let lastError = null;
   for (const source of PDFJS_SOURCES) {
     try {
-      await loadScript(source.script);
+      const scriptUrl = resolveAssetUrl(source.script);
+      const workerUrl = resolveAssetUrl(source.worker);
+      if (source.script.endsWith(".mjs")) {
+        const pdfModule = await loadPdfModule(scriptUrl);
+        if (pdfModule) {
+          window.pdfjsLib = pdfModule;
+        }
+      } else {
+        await loadScript(scriptUrl);
+      }
       if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = source.worker;
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
       }
       if (window.pdfjsLib && window.pdfjsLib.getDocument) {
         state.pdfLoaded = true;
@@ -623,7 +652,9 @@ async function loadPdfJs() {
   }
   throw (
     lastError ||
-    new Error("PDF reader unavailable. Add vendor/pdfjs/pdf.min.js and pdf.worker.min.js.")
+    new Error(
+      "PDF reader unavailable. Add vendor/pdfjs/pdf.min.mjs and pdf.worker.min.mjs (or legacy .js builds)."
+    )
   );
 }
 

@@ -64,6 +64,13 @@ define('OCR_DEFAULT_ENABLED', false);
 PDF text extraction requires PDF.js. Download it into `vendor/pdfjs/`:
 
 ```
+vendor/pdfjs/pdf.min.mjs
+vendor/pdfjs/pdf.worker.min.mjs
+```
+
+Legacy `.js` builds also work if you prefer them:
+
+```
 vendor/pdfjs/pdf.min.js
 vendor/pdfjs/pdf.worker.min.js
 ```

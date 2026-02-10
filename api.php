@@ -38,14 +38,26 @@ function veryfi_configured(): bool
 
 function pdfjs_available(): bool
 {
-    $script = __DIR__ . '/vendor/pdfjs/pdf.min.js';
-    $worker = __DIR__ . '/vendor/pdfjs/pdf.worker.min.js';
-    return is_file($script)
-        && is_readable($script)
-        && filesize($script) > 0
-        && is_file($worker)
-        && is_readable($worker)
-        && filesize($worker) > 0;
+    $pairs = [
+        ['pdf.min.mjs', 'pdf.worker.min.mjs'],
+        ['pdf.min.js', 'pdf.worker.min.js'],
+    ];
+    foreach ($pairs as $pair) {
+        [$script, $worker] = $pair;
+        $scriptPath = __DIR__ . '/vendor/pdfjs/' . $script;
+        $workerPath = __DIR__ . '/vendor/pdfjs/' . $worker;
+        if (
+            is_file($scriptPath)
+            && is_readable($scriptPath)
+            && filesize($scriptPath) > 0
+            && is_file($workerPath)
+            && is_readable($workerPath)
+            && filesize($workerPath) > 0
+        ) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function veryfi_serialize_value($value): string
