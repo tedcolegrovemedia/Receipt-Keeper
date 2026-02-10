@@ -710,7 +710,11 @@ async function extractPdfText(file, token) {
     const pageText = content.items.map((item) => item.str || "").join(" ");
     text += `${pageText}\n`;
   }
-  return text.trim();
+  const normalized = text.trim();
+  if (!normalized) {
+    throw new Error("No text extracted from PDF.");
+  }
+  return normalized;
 }
 
 function logClientError(message, context = {}) {
