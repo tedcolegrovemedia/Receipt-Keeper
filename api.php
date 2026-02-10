@@ -148,7 +148,7 @@ function close_curl_handle($handle): void
 
 try {
     if (!ensure_storage_ready()) {
-        respond(['ok' => false, 'error' => 'Storage not ready. Ensure data/ is writable and SQLite is available.'], 500);
+        respond(['ok' => false, 'error' => 'Storage not ready. Ensure data/ and uploads/ are writable.'], 500);
     }
 
     $action = $_GET['action'] ?? '';
@@ -159,6 +159,7 @@ try {
         respond([
             'ok' => true,
             'mode' => 'server',
+            'storage' => receipts_use_sqlite() ? 'sqlite' : 'json',
             'veryfi' => $configured,
             'ocrDefaultEnabled' => OCR_DEFAULT_ENABLED,
             'veryfiLimit' => $usage['limit'],

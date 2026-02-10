@@ -195,6 +195,26 @@ function sqlite_available(): bool
     return in_array('sqlite', $drivers, true);
 }
 
+function receipts_use_sqlite(): bool
+{
+    static $useSqlite = null;
+    if ($useSqlite !== null) {
+        return $useSqlite;
+    }
+    if (!sqlite_available()) {
+        $useSqlite = false;
+        return false;
+    }
+    try {
+        $db = get_db();
+        init_receipts_db($db);
+        $useSqlite = true;
+    } catch (Throwable $error) {
+        $useSqlite = false;
+    }
+    return $useSqlite;
+}
+
 function get_db(): PDO
 {
     static $db = null;
@@ -302,18 +322,21 @@ function ensure_storage_ready(): bool
         }
     }
 
-    $dbExists = is_file(SQLITE_DB_FILE);
-    try {
-        $db = get_db();
-        init_receipts_db($db);
-        if (!$dbExists) {
-            migrate_receipts_from_json($db);
+    if (receipts_use_sqlite()) {
+        $dbExists = is_file(SQLITE_DB_FILE);
+        try {
+            $db = get_db();
+            init_receipts_db($db);
+            if (!$dbExists) {
+                migrate_receipts_from_json($db);
+            }
+        } catch (Throwable $error) {
+            return false;
         }
-    } catch (Throwable $error) {
-        return false;
+        return is_writable(DATA_DIR) && is_writable(UPLOADS_DIR) && is_writable(SQLITE_DB_FILE);
     }
 
-    return is_writable(DATA_DIR) && is_writable(UPLOADS_DIR) && is_writable(SQLITE_DB_FILE);
+    return data_store_available() && is_writable(UPLOADS_DIR);
 }
 
 function load_veryfi_usage(): array
@@ -391,52 +414,173 @@ function map_receipt_row(array $row): array
     ];
 }
 
+function normalize_receipt_record(array $receipt): array
+{
+    return [
+        'id' => isset($receipt['id']) ? (string) $receipt['id'] : '',
+        'date' => isset($receipt['date']) ? (string) $receipt['date'] : '',
+        'vendor' => isset($receipt['vendor']) ? (string) $receipt['vendor'] : '',
+        'location' => isset($receipt['location']) ? (string) $receipt['location'] : '',
+        'category' => isset($receipt['category']) ? (string) $receipt['category'] : '',
+        'businessPurpose' => isset($receipt['businessPurpose'])
+            ? (string) $receipt['businessPurpose']
+            : (isset($receipt['business_purpose']) ? (string) $receipt['business_purpose'] : ''),
+        'total' => isset($receipt['total']) ? (float) $receipt['total'] : 0.0,
+        'createdAt' => isset($receipt['createdAt'])
+            ? (string) $receipt['createdAt']
+            : (isset($receipt['created_at']) ? (string) $receipt['created_at'] : ''),
+        'imageFile' => isset($receipt['imageFile'])
+            ? (string) $receipt['imageFile']
+            : (isset($receipt['image_file']) ? (string) $receipt['image_file'] : ''),
+    ];
+}
+
+function load_receipts_json(): array
+{
+    if (!is_file(RECEIPTS_FILE)) {
+        return [];
+    }
+    $raw = file_get_contents(RECEIPTS_FILE);
+    if ($raw === false || trim($raw) === '') {
+        return [];
+    }
+    $data = json_decode($raw, true);
+    return is_array($data) ? $data : [];
+}
+
+function save_receipts_json(array $receipts): bool
+{
+    if (!data_store_available()) {
+        return false;
+    }
+    return file_put_contents(RECEIPTS_FILE, json_encode($receipts, JSON_PRETTY_PRINT), LOCK_EX) !== false;
+}
+
 function fetch_all_receipts(): array
 {
-    $db = get_db();
-    $stmt = $db->query('SELECT id, date, vendor, location, category, business_purpose, total, created_at, image_file FROM receipts ORDER BY date DESC, created_at DESC');
-    $rows = $stmt ? $stmt->fetchAll() : [];
-    return array_map('map_receipt_row', $rows ?: []);
+    if (receipts_use_sqlite()) {
+        $db = get_db();
+        $stmt = $db->query('SELECT id, date, vendor, location, category, business_purpose, total, created_at, image_file FROM receipts ORDER BY date DESC, created_at DESC');
+        $rows = $stmt ? $stmt->fetchAll() : [];
+        return array_map('map_receipt_row', $rows ?: []);
+    }
+
+    $records = [];
+    foreach (load_receipts_json() as $receipt) {
+        if (!is_array($receipt)) {
+            continue;
+        }
+        $normalized = normalize_receipt_record($receipt);
+        if ($normalized['id'] === '') {
+            continue;
+        }
+        $records[] = $normalized;
+    }
+
+    usort($records, function (array $a, array $b): int {
+        $aKey = $a['date'] ?: $a['createdAt'];
+        $bKey = $b['date'] ?: $b['createdAt'];
+        return strcmp((string) $bKey, (string) $aKey);
+    });
+
+    return $records;
 }
 
 function fetch_receipt_by_id(string $id): ?array
 {
-    $db = get_db();
-    $stmt = $db->prepare('SELECT id, date, vendor, location, category, business_purpose, total, created_at, image_file FROM receipts WHERE id = :id LIMIT 1');
-    $stmt->execute([':id' => $id]);
-    $row = $stmt->fetch();
-    if (!$row) {
-        return null;
+    if (receipts_use_sqlite()) {
+        $db = get_db();
+        $stmt = $db->prepare('SELECT id, date, vendor, location, category, business_purpose, total, created_at, image_file FROM receipts WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            return null;
+        }
+        return map_receipt_row($row);
     }
-    return map_receipt_row($row);
+
+    foreach (load_receipts_json() as $receipt) {
+        if (!is_array($receipt)) {
+            continue;
+        }
+        $normalized = normalize_receipt_record($receipt);
+        if ($normalized['id'] === $id) {
+            return $normalized;
+        }
+    }
+    return null;
 }
 
 function upsert_receipt(array $record): bool
 {
-    $db = get_db();
-    $stmt = $db->prepare(
-        'INSERT OR REPLACE INTO receipts (id, date, vendor, location, category, business_purpose, total, created_at, image_file)
-         VALUES (:id, :date, :vendor, :location, :category, :business_purpose, :total, :created_at, :image_file)'
-    );
-    return $stmt->execute([
-        ':id' => $record['id'] ?? '',
-        ':date' => $record['date'] ?? '',
-        ':vendor' => $record['vendor'] ?? '',
-        ':location' => $record['location'] ?? '',
-        ':category' => $record['category'] ?? '',
-        ':business_purpose' => $record['businessPurpose'] ?? '',
-        ':total' => $record['total'] ?? 0,
-        ':created_at' => $record['createdAt'] ?? '',
-        ':image_file' => $record['imageFile'] ?? '',
-    ]);
+    if (receipts_use_sqlite()) {
+        $db = get_db();
+        $stmt = $db->prepare(
+            'INSERT OR REPLACE INTO receipts (id, date, vendor, location, category, business_purpose, total, created_at, image_file)
+             VALUES (:id, :date, :vendor, :location, :category, :business_purpose, :total, :created_at, :image_file)'
+        );
+        return $stmt->execute([
+            ':id' => $record['id'] ?? '',
+            ':date' => $record['date'] ?? '',
+            ':vendor' => $record['vendor'] ?? '',
+            ':location' => $record['location'] ?? '',
+            ':category' => $record['category'] ?? '',
+            ':business_purpose' => $record['businessPurpose'] ?? '',
+            ':total' => $record['total'] ?? 0,
+            ':created_at' => $record['createdAt'] ?? '',
+            ':image_file' => $record['imageFile'] ?? '',
+        ]);
+    }
+
+    $records = load_receipts_json();
+    $normalized = normalize_receipt_record($record);
+    if ($normalized['id'] === '') {
+        return false;
+    }
+
+    $updated = false;
+    foreach ($records as $index => $existing) {
+        if (!is_array($existing)) {
+            continue;
+        }
+        if (($existing['id'] ?? '') === $normalized['id']) {
+            $records[$index] = $normalized;
+            $updated = true;
+            break;
+        }
+    }
+    if (!$updated) {
+        $records[] = $normalized;
+    }
+    return save_receipts_json($records);
 }
 
 function delete_receipt_by_id(string $id): bool
 {
-    $db = get_db();
-    $stmt = $db->prepare('DELETE FROM receipts WHERE id = :id');
-    $stmt->execute([':id' => $id]);
-    return $stmt->rowCount() > 0;
+    if (receipts_use_sqlite()) {
+        $db = get_db();
+        $stmt = $db->prepare('DELETE FROM receipts WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+        return $stmt->rowCount() > 0;
+    }
+
+    $records = load_receipts_json();
+    $filtered = [];
+    $deleted = false;
+    foreach ($records as $receipt) {
+        if (!is_array($receipt)) {
+            continue;
+        }
+        if (($receipt['id'] ?? '') === $id) {
+            $deleted = true;
+            continue;
+        }
+        $filtered[] = $receipt;
+    }
+    if (!$deleted) {
+        return false;
+    }
+    return save_receipts_json($filtered);
 }
 
 function build_image_url(string $id): string

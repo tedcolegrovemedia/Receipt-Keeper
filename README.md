@@ -14,7 +14,7 @@ A lightweight, self-hosted receipt logger with OCR, bulk upload, and CSV export.
 
 ## Requirements
 - PHP 8.0+ (tested on 8.x)
-- `pdo_sqlite` enabled
+- `pdo_sqlite` enabled (optional; falls back to JSON if unavailable)
 - Web server (Apache / Nginx) or PHP built-in server for local testing
 
 ## Setup
@@ -71,7 +71,7 @@ Open: `http://127.0.0.1:8000`
 - Place the app in a subfolder and protect with HTTPS if possible.
 - Ensure `data/` is writable and not publicly accessible.
 - Keep `config.local.php` and `data/password.json` out of version control.
-- If SQLite is not available on your host, the API will return a storage error.
+- If SQLite is not available on your host, the app will use `data/receipts.json` instead.
 
 ## OCR Notes
 - OCR runs automatically when enabled (no UI toggle).
