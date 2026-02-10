@@ -1736,34 +1736,97 @@ function parseTotalFromText(text) {
 }
 
 function parseDateFromText(text) {
-  const patterns = [
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const monthNames =
+    "(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
+  const monthRegex = new RegExp(`\\b${monthNames}\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,)?\\s+(\\d{4})\\b`, "i");
+  const dayFirstRegex = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${monthNames}\\s+(\\d{4})\\b`, "i");
+  const numericPatterns = [
     { regex: /\b(20\d{2}|19\d{2})[\/\-.](0?[1-9]|1[0-2])[\/\-.](0?[1-9]|[12]\d|3[01])\b/, order: "ymd" },
     { regex: /\b(0?[1-9]|1[0-2])[\/\-.](0?[1-9]|[12]\d|3[01])[\/\-.]((?:20)?\d{2})\b/, order: "mdy" },
   ];
 
-  for (const pattern of patterns) {
-    const match = text.match(pattern.regex);
-    if (!match) continue;
-    let year;
-    let month;
-    let day;
-    if (pattern.order === "ymd") {
-      year = parseInt(match[1], 10);
-      month = parseInt(match[2], 10);
-      day = parseInt(match[3], 10);
-    } else {
-      month = parseInt(match[1], 10);
-      day = parseInt(match[2], 10);
-      year = parseInt(match[3], 10);
-      if (year < 100) year += 2000;
-    }
+  const monthIndex = (value) => {
+    const key = value.toLowerCase().slice(0, 3);
+    const map = {
+      jan: 1,
+      feb: 2,
+      mar: 3,
+      apr: 4,
+      may: 5,
+      jun: 6,
+      jul: 7,
+      aug: 8,
+      sep: 9,
+      oct: 10,
+      nov: 11,
+      dec: 12,
+    };
+    return map[key] || 0;
+  };
+
+  const buildDate = (year, month, day) => {
     const date = new Date(year, month - 1, day);
-    if (date.getMonth() + 1 !== month || date.getDate() !== day) continue;
-    return `${year.toString().padStart(4, "0")}-${month
+    if (date.getMonth() + 1 !== month || date.getDate() !== day) return null;
+    return `${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-${day
       .toString()
-      .padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+      .padStart(2, "0")}`;
+  };
+
+  const parseMonthDate = (value) => {
+    let match = value.match(monthRegex);
+    if (match) {
+      const month = monthIndex(match[1]);
+      const day = parseInt(match[2], 10);
+      const year = parseInt(match[3], 10);
+      if (month) return buildDate(year, month, day);
+    }
+    match = value.match(dayFirstRegex);
+    if (match) {
+      const day = parseInt(match[1], 10);
+      const month = monthIndex(match[2]);
+      const year = parseInt(match[3], 10);
+      if (month) return buildDate(year, month, day);
+    }
+    return null;
+  };
+
+  const parseNumericDate = (value) => {
+    for (const pattern of numericPatterns) {
+      const match = value.match(pattern.regex);
+      if (!match) continue;
+      let year;
+      let month;
+      let day;
+      if (pattern.order === "ymd") {
+        year = parseInt(match[1], 10);
+        month = parseInt(match[2], 10);
+        day = parseInt(match[3], 10);
+      } else {
+        month = parseInt(match[1], 10);
+        day = parseInt(match[2], 10);
+        year = parseInt(match[3], 10);
+        if (year < 100) year += 2000;
+      }
+      const formatted = buildDate(year, month, day);
+      if (formatted) return formatted;
+    }
+    return null;
+  };
+
+  const preferredLine = /(date|paid|invoice|issued|billing)/i;
+  for (const line of lines) {
+    if (!preferredLine.test(line)) continue;
+    const parsed = parseMonthDate(line) || parseNumericDate(line);
+    if (parsed) return parsed;
   }
-  return null;
+
+  const monthWide = parseMonthDate(text);
+  if (monthWide) return monthWide;
+  return parseNumericDate(text);
 }
 
 function parseVendorFromText(text) {
@@ -1771,9 +1834,38 @@ function parseVendorFromText(text) {
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter((line) => line.length > 2);
-  const skipRegex = /(total|amount|balance|tax|change|visa|mastercard|amex|cash|subtotal)/i;
+  const skipRegex =
+    /(invoice|date|paid|total|amount|balance|tax|change|visa|mastercard|amex|cash|subtotal|payment|receipt|vat|email|plan)/i;
+  const companyRegex =
+    /\b(inc|llc|l\.l\.c\.|corp|corporation|company|co\.|ltd|limited|gmbh|sarl|sa|plc|bv|oy|ab|ag|kg|pte|llp)\b/i;
+  const emailRegex = /@/;
+  const urlRegex = /(https?:\/\/|www\.)/i;
+  const addressRegex =
+    /\b(\d{1,5}\s+\S+|street|st\.|avenue|ave\.|road|rd\.|boulevard|blvd\.|lane|ln\.|drive|dr\.|suite|ste\.|floor|fl\.|strasse|straße|str\.)\b/i;
+  const postalRegex = /\b\d{5}(?:-\d{4})?\b/;
+
+  const isSkippable = (line) =>
+    skipRegex.test(line) || emailRegex.test(line) || urlRegex.test(line) || postalRegex.test(line);
+  const isAddress = (line) => addressRegex.test(line);
+
   for (const line of lines) {
-    if (/[A-Za-z]/.test(line) && !skipRegex.test(line)) {
+    if (companyRegex.test(line) && !isSkippable(line) && !isAddress(line)) {
+      return line.slice(0, 40);
+    }
+  }
+
+  for (let i = 0; i < lines.length - 1; i += 1) {
+    if (!skipRegex.test(lines[i])) continue;
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const candidate = lines[j];
+      if (!/[A-Za-z]/.test(candidate)) continue;
+      if (isSkippable(candidate) || isAddress(candidate)) continue;
+      return candidate.slice(0, 40);
+    }
+  }
+
+  for (const line of lines) {
+    if (/[A-Za-z]/.test(line) && !isSkippable(line) && !isAddress(line)) {
       return line.slice(0, 40);
     }
   }
