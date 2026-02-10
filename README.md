@@ -61,7 +61,7 @@ define('OCR_DEFAULT_ENABLED', false);
 ```
 
 ### 4) (Optional) Local PDF text extraction
-PDF text extraction requires PDF.js. Download it into `vendor/pdfjs/`:
+PDF text extraction requires PDF.js. This repo includes the PDF.js files under `vendor/pdfjs/` by default. If you remove them, re-add these:
 
 ```
 vendor/pdfjs/pdf.min.mjs
@@ -72,11 +72,6 @@ Legacy `.mjs` and `.js` builds also work if you prefer them:
 
 ```
 vendor/pdfjs/pdf.worker.min.mjs
-```
-
-```
-vendor/pdfjs/pdf.min.js
-vendor/pdfjs/pdf.worker.min.js
 ```
 
 ```
