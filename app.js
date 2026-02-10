@@ -106,6 +106,22 @@ function formatSize(bytes) {
   return `${value.toFixed(value < 10 ? 1 : 0)} ${sizes[index]}`;
 }
 
+function formatShortDate(value) {
+  if (!value) return "—";
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    return `${match[2]}/${match[3]}/${match[1].slice(2)}`;
+  }
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    const year = String(parsed.getFullYear()).slice(2);
+    return `${month}/${day}/${year}`;
+  }
+  return String(value);
+}
+
 function isImageFile(file) {
   if (!file) return false;
   if (file.type && file.type.startsWith("image/")) return true;
@@ -604,6 +620,12 @@ function clearPreview() {
   elements.previewImage.style.display = "none";
   elements.previewPlaceholder.style.display = "block";
   elements.previewMeta.textContent = "Choose a photo to preview.";
+  if (elements.previewImage) elements.previewImage.classList.remove("zoomed");
+  if (elements.previewDrop) {
+    elements.previewDrop.classList.remove("zoomed");
+    elements.previewDrop.scrollTop = 0;
+    elements.previewDrop.scrollLeft = 0;
+  }
 }
 
 function setPreview(file, metaText) {
@@ -615,6 +637,12 @@ function setPreview(file, metaText) {
   elements.previewImage.src = url;
   elements.previewImage.style.display = "block";
   elements.previewPlaceholder.style.display = "none";
+  elements.previewImage.classList.remove("zoomed");
+  if (elements.previewDrop) {
+    elements.previewDrop.classList.remove("zoomed");
+    elements.previewDrop.scrollTop = 0;
+    elements.previewDrop.scrollLeft = 0;
+  }
   const name = file.name ? file.name : "receipt image";
   elements.previewMeta.textContent = metaText || `${name} · ${formatSize(file.size)}`;
   elements.previewImage.onload = () => URL.revokeObjectURL(url);
@@ -1120,7 +1148,7 @@ function buildReceiptRow(receipt) {
   checkboxCell.append(checkbox);
 
   const dateCell = document.createElement("td");
-  dateCell.textContent = receipt.date || "—";
+  dateCell.textContent = formatShortDate(receipt.date);
 
   const vendorCell = document.createElement("td");
   vendorCell.textContent = receipt.vendor || "Unknown vendor";
@@ -1344,6 +1372,15 @@ async function init() {
     elements.ocrProvider.addEventListener("change", () => {
       setOcrReadyState();
       updateVeryfiStatus();
+    });
+  }
+  if (elements.previewImage && elements.previewDrop) {
+    elements.previewImage.addEventListener("click", () => {
+      if (elements.previewImage.style.display === "none") return;
+      const zoomed = elements.previewImage.classList.toggle("zoomed");
+      elements.previewDrop.classList.toggle("zoomed", zoomed);
+      elements.previewDrop.scrollTop = 0;
+      elements.previewDrop.scrollLeft = 0;
     });
   }
 
