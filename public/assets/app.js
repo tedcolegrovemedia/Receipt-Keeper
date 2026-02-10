@@ -562,7 +562,13 @@ function updateOcrStatusLabel() {
     return;
   }
   if (override === "veryfi") {
-    elements.ocrStatus.textContent = shouldRunVeryfi() ? "OCR: Veryfi (manual)" : "OCR: Veryfi unavailable";
+    if (shouldRunVeryfi()) {
+      elements.ocrStatus.textContent = "OCR: Veryfi (manual)";
+    } else if (canRunLocalOcr() && !isVeryfiExhausted()) {
+      elements.ocrStatus.textContent = "OCR: local (fallback)";
+    } else {
+      elements.ocrStatus.textContent = "OCR: Veryfi unavailable";
+    }
     updateOcrRemainingVisibility();
     return;
   }
@@ -1734,6 +1740,60 @@ function buildOcrSummary(suggestions) {
   return summary.join(" · ");
 }
 
+async function runLocalOcrFlow(token, statusOverride = "") {
+  if (!state.currentFile) return;
+  if (isPdfFile(state.currentFile)) {
+    if (!canUsePdfText()) {
+      setOcrStatusForToken(token, "OCR: PDF text unavailable (missing PDF.js).");
+      setOcrProgressForToken(token, { active: false });
+      return;
+    }
+    try {
+      const text = await extractPdfText(state.currentFile, token);
+      if (!isActiveToken(token)) return;
+      state.ocrText = text;
+      state.ocrSuggestions = buildOcrSuggestions(text);
+      if (state.ocrSuggestions) {
+        applySuggestions();
+        const summary = buildOcrSummary(state.ocrSuggestions);
+        setOcrStatusForToken(token, summary ? `OCR: applied. ${summary}` : "OCR: applied.");
+      } else {
+        setOcrStatusForToken(token, "OCR: no suggestions.");
+      }
+      setOcrProgressForToken(token, { active: false });
+    } catch (error) {
+      if (!isActiveToken(token)) return;
+      setOcrStatusForToken(token, `OCR: ${error.message}`);
+      setOcrProgressForToken(token, { active: false });
+      logClientError("PDF text extraction failed", { error: error.message });
+    }
+    return;
+  }
+
+  const reason = getVeryfiBlockReason();
+  const status = statusOverride || (reason ? `OCR: using local (${reason})...` : "OCR: running locally...");
+  setOcrStatusForToken(token, status);
+  try {
+    const { text, suggestions } = await runLocalOcrForFile(state.currentFile, token);
+    if (!isActiveToken(token)) return;
+    state.ocrText = text;
+    state.ocrSuggestions = suggestions || null;
+    if (state.ocrSuggestions) {
+      applySuggestions();
+      const summary = buildOcrSummary(state.ocrSuggestions);
+      setOcrStatusForToken(token, summary ? `OCR: applied. ${summary}` : "OCR: applied.");
+    } else {
+      setOcrStatusForToken(token, "OCR: no suggestions.");
+    }
+    setOcrProgressForToken(token, { active: false });
+  } catch (error) {
+    if (!isActiveToken(token)) return;
+    setOcrStatusForToken(token, `OCR: ${error.message}`);
+    setOcrProgressForToken(token, { active: false });
+    logClientError("Local OCR failed", { error: error.message });
+  }
+}
+
 async function loadTesseract() {
   if (state.ocrLoaded) return;
   await new Promise((resolve, reject) => {
@@ -1841,9 +1901,14 @@ async function autoRunOcrForCurrentFile(token) {
   const override = storage.ocrOverride || "auto";
   const canVeryfi = shouldRunVeryfi();
   const canLocal = canRunLocalOcr();
+  const allowLocalFallback = canLocal && !isVeryfiExhausted();
 
   if (override === "veryfi") {
     if (!canVeryfi) {
+      if (allowLocalFallback) {
+        await runLocalOcrFlow(token, "OCR: Veryfi unavailable, using local...");
+        return;
+      }
       setOcrStatusForToken(token, "OCR: Veryfi unavailable.");
       setOcrProgressForToken(token, { active: false });
       return;
@@ -1856,33 +1921,8 @@ async function autoRunOcrForCurrentFile(token) {
       setOcrProgressForToken(token, { active: false });
       return;
     }
-    if (isPdfFile(state.currentFile)) {
-      if (!canUsePdfText()) {
-        setOcrStatusForToken(token, "OCR: PDF text unavailable (missing PDF.js).");
-        setOcrProgressForToken(token, { active: false });
-        return;
-      }
-      try {
-        const text = await extractPdfText(state.currentFile, token);
-        if (!isActiveToken(token)) return;
-        state.ocrText = text;
-        state.ocrSuggestions = buildOcrSuggestions(text);
-        if (state.ocrSuggestions) {
-          applySuggestions();
-          const summary = buildOcrSummary(state.ocrSuggestions);
-          setOcrStatusForToken(token, summary ? `OCR: applied. ${summary}` : "OCR: applied.");
-        } else {
-          setOcrStatusForToken(token, "OCR: no suggestions.");
-        }
-        setOcrProgressForToken(token, { active: false });
-      } catch (error) {
-        if (!isActiveToken(token)) return;
-        setOcrStatusForToken(token, `OCR: ${error.message}`);
-        setOcrProgressForToken(token, { active: false });
-        logClientError("PDF text extraction failed", { error: error.message });
-      }
-      return;
-    }
+    await runLocalOcrFlow(token, "OCR: running locally...");
+    return;
   }
 
   if (override === "veryfi" && isPdfFile(state.currentFile)) {
@@ -1993,32 +2033,15 @@ async function autoRunOcrForCurrentFile(token) {
   }
 
   if ((override === "local" || override === "auto") && shouldRunLocalOcr()) {
-    const reason = getVeryfiBlockReason();
-    const status = reason ? `OCR: using local (${reason})...` : "OCR: running locally...";
-    setOcrStatusForToken(token, status);
-    try {
-      const { text, suggestions } = await runLocalOcrForFile(state.currentFile, token);
-      if (!isActiveToken(token)) return;
-      state.ocrText = text;
-      state.ocrSuggestions = suggestions || null;
-      if (state.ocrSuggestions) {
-        applySuggestions();
-        const summary = buildOcrSummary(state.ocrSuggestions);
-        setOcrStatusForToken(token, summary ? `OCR: applied. ${summary}` : "OCR: applied.");
-      } else {
-        setOcrStatusForToken(token, "OCR: no suggestions.");
-      }
-      setOcrProgressForToken(token, { active: false });
-    } catch (error) {
-      if (!isActiveToken(token)) return;
-      setOcrStatusForToken(token, `OCR: ${error.message}`);
-      setOcrProgressForToken(token, { active: false });
-      logClientError("Local OCR failed", { error: error.message });
-    }
+    await runLocalOcrFlow(token);
     return;
   }
 
   const reason = getVeryfiBlockReason();
+  if (!reason && allowLocalFallback) {
+    await runLocalOcrFlow(token, "OCR: using local...");
+    return;
+  }
   setOcrStatusForToken(token, reason ? `OCR: ${reason}` : "OCR: unavailable.");
   setOcrProgressForToken(token, { active: false });
 }
