@@ -9,6 +9,7 @@ const ATTEMPTS_FILE = DATA_DIR . '/attempts.json';
 const RECEIPTS_FILE = DATA_DIR . '/receipts.json';
 const SQLITE_DB_FILE = DATA_DIR . '/receipts.sqlite';
 const UPLOADS_DIR = DATA_DIR . '/uploads';
+const VENDOR_MEMORY_FILE = DATA_DIR . '/vendor-memory.json';
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOGIN_WINDOW_SECONDS = 900;
 const MIN_PASSWORD_LENGTH = 12;

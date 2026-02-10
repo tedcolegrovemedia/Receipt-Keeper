@@ -85,6 +85,7 @@ const state = {
   modalUrl: null,
   modalReceipt: null,
   pdfObjectUrls: [],
+  vendorMemory: [],
 };
 
 function createZoomState() {
@@ -601,6 +602,82 @@ function setOcrProgressForToken(token, options = {}) {
   setOcrProgressState(options);
 }
 
+function normalizeVendorKeyValue(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function loadVendorMemory() {
+  if (storage.mode !== "server") {
+    try {
+      const raw = localStorage.getItem("vendorMemory");
+      const parsed = raw ? JSON.parse(raw) : null;
+      state.vendorMemory = parsed && Array.isArray(parsed.vendors) ? parsed.vendors : [];
+    } catch (error) {
+      state.vendorMemory = [];
+    }
+    window.vendorMemory = state.vendorMemory;
+    return;
+  }
+  try {
+    const data = await apiRequest("memory_get");
+    state.vendorMemory = Array.isArray(data.vendors) ? data.vendors : [];
+    window.vendorMemory = state.vendorMemory;
+  } catch (error) {
+    state.vendorMemory = [];
+    window.vendorMemory = state.vendorMemory;
+  }
+}
+
+async function rememberVendorFromOcr(text, finalVendor, originalVendor) {
+  if (!text || !finalVendor) return;
+  const finalKey = normalizeVendorKeyValue(finalVendor);
+  if (!finalKey) return;
+  const originalKey = normalizeVendorKeyValue(originalVendor || "");
+  if (originalKey && originalKey === finalKey) return;
+  if (typeof extractVendorSignals !== "function") return;
+  const signals = extractVendorSignals(text, finalVendor);
+  if (!signals) return;
+
+  if (storage.mode !== "server") {
+    const vendors = Array.isArray(state.vendorMemory) ? [...state.vendorMemory] : [];
+    const entryKey = normalizeVendorKeyValue(finalVendor);
+    const existing = vendors.find((entry) => normalizeVendorKeyValue(entry.vendor) === entryKey);
+    if (existing) {
+      existing.domains = Array.from(new Set([...(existing.domains || []), ...(signals.domains || [])]));
+      existing.addresses = Array.from(new Set([...(existing.addresses || []), ...(signals.addresses || [])]));
+      existing.lines = Array.from(new Set([...(existing.lines || []), ...(signals.lines || [])]));
+      existing.tokens = Array.from(new Set([...(existing.tokens || []), ...(signals.tokens || [])]));
+      existing.count = (existing.count || 0) + 1;
+    } else {
+      vendors.push({ ...signals, count: 1 });
+    }
+    state.vendorMemory = vendors;
+    window.vendorMemory = vendors;
+    try {
+      localStorage.setItem("vendorMemory", JSON.stringify({ vendors }));
+    } catch (error) {
+      // ignore storage errors
+    }
+    return;
+  }
+
+  try {
+    const data = await apiRequest("memory_learn", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(signals),
+    });
+    state.vendorMemory = Array.isArray(data.vendors) ? data.vendors : state.vendorMemory;
+    window.vendorMemory = state.vendorMemory;
+  } catch (error) {
+    logClientError("Vendor memory update failed", { error: error.message });
+  }
+}
+
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     const script = document.createElement("script");
@@ -1104,6 +1181,8 @@ async function addBulkFiles(files) {
     if (item.ocrStatus === "running") {
       try {
         const { text, suggestions } = await runVeryfiOcrForFile(processed);
+        item.ocrText = text;
+        item.ocrVendor = suggestions ? suggestions.vendor : "";
         applyOcrToBulkItem(item, suggestions);
         if (suggestions && Object.keys(suggestions).length > 0) {
           item.ocrStatus = "applied";
@@ -1167,6 +1246,11 @@ async function saveBulkReceipts() {
 
   try {
     await addReceiptsBulk(receipts);
+    for (const item of bulkState.items) {
+      if (item.ocrText && item.vendor) {
+        await rememberVendorFromOcr(item.ocrText, item.vendor, item.ocrVendor || "");
+      }
+    }
     const savedCount = receipts.length;
     clearBulkQueue();
     updateBulkControls(`Saved ${savedCount} receipt${savedCount === 1 ? "" : "s"}.`);
@@ -2226,6 +2310,7 @@ async function init() {
   elements.receiptDate.value = todayISO();
   clearPreview();
   await initStorage();
+  await loadVendorMemory();
   if (storage.mode === "local" && !window.indexedDB) {
     setPreviewMessage("IndexedDB is not supported in this browser.");
     return;
@@ -2335,6 +2420,7 @@ async function init() {
 
     try {
       await addReceipt(receipt);
+      await rememberVendorFromOcr(state.ocrText, receipt.vendor, state.ocrSuggestions?.vendor || "");
       resetForm();
       await refreshList();
     } catch (error) {

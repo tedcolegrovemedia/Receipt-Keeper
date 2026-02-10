@@ -66,6 +66,63 @@ function pdfjs_available(): bool
     return false;
 }
 
+function normalize_vendor_key(string $value): string
+{
+    $value = strtolower($value);
+    $value = preg_replace('/[^a-z0-9]+/', ' ', $value) ?? '';
+    return trim(preg_replace('/\s+/', ' ', $value) ?? '');
+}
+
+function sanitize_signal_list($values, int $limit = 12): array
+{
+    if (!is_array($values)) {
+        return [];
+    }
+    $clean = [];
+    foreach ($values as $value) {
+        if (!is_string($value)) {
+            continue;
+        }
+        $value = trim(strtolower($value));
+        if ($value === '') {
+            continue;
+        }
+        $clean[$value] = true;
+        if (count($clean) >= $limit) {
+            break;
+        }
+    }
+    return array_keys($clean);
+}
+
+function load_vendor_memory(): array
+{
+    if (!is_file(VENDOR_MEMORY_FILE)) {
+        return ['vendors' => []];
+    }
+    $raw = file_get_contents(VENDOR_MEMORY_FILE);
+    if ($raw === false) {
+        return ['vendors' => []];
+    }
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        return ['vendors' => []];
+    }
+    if (!isset($data['vendors']) || !is_array($data['vendors'])) {
+        $data['vendors'] = [];
+    }
+    return $data;
+}
+
+function save_vendor_memory(array $data): bool
+{
+    if (!data_store_available()) {
+        return false;
+    }
+    $payload = json_encode($data, JSON_PRETTY_PRINT);
+    return file_put_contents(VENDOR_MEMORY_FILE, $payload, LOCK_EX) !== false;
+}
+
 function veryfi_serialize_value($value): string
 {
     if (is_array($value)) {
@@ -207,6 +264,69 @@ try {
             return $receipt;
         }, $receipts);
         respond(['ok' => true, 'receipts' => $normalized]);
+    }
+
+    if ($action === 'memory_get') {
+        $memory = load_vendor_memory();
+        respond(['ok' => true, 'vendors' => $memory['vendors']]);
+    }
+
+    if ($action === 'memory_learn') {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            respond(['ok' => false, 'error' => 'Invalid request method.'], 405);
+        }
+        $raw = file_get_contents('php://input');
+        $data = $raw ? json_decode($raw, true) : [];
+        if (!is_array($data)) {
+            respond(['ok' => false, 'error' => 'Invalid payload.'], 400);
+        }
+
+        $vendor = isset($data['vendor']) ? trim((string) $data['vendor']) : '';
+        if ($vendor === '') {
+            respond(['ok' => false, 'error' => 'Missing vendor.'], 422);
+        }
+
+        $entry = [
+            'key' => normalize_vendor_key($vendor),
+            'vendor' => $vendor,
+            'domains' => sanitize_signal_list($data['domains'] ?? []),
+            'addresses' => sanitize_signal_list($data['addresses'] ?? []),
+            'lines' => sanitize_signal_list($data['lines'] ?? []),
+            'tokens' => sanitize_signal_list($data['tokens'] ?? []),
+        ];
+
+        $memory = load_vendor_memory();
+        $vendors = $memory['vendors'] ?? [];
+        $updated = false;
+
+        foreach ($vendors as &$existing) {
+            if (!is_array($existing) || ($existing['key'] ?? '') !== $entry['key']) {
+                continue;
+            }
+            $existing['vendor'] = $vendor;
+            $existing['domains'] = array_values(array_unique(array_merge($existing['domains'] ?? [], $entry['domains'])));
+            $existing['addresses'] = array_values(array_unique(array_merge($existing['addresses'] ?? [], $entry['addresses'])));
+            $existing['lines'] = array_values(array_unique(array_merge($existing['lines'] ?? [], $entry['lines'])));
+            $existing['tokens'] = array_values(array_unique(array_merge($existing['tokens'] ?? [], $entry['tokens'])));
+            $existing['count'] = ($existing['count'] ?? 0) + 1;
+            $existing['updatedAt'] = gmdate('c');
+            $updated = true;
+            break;
+        }
+        unset($existing);
+
+        if (!$updated) {
+            $entry['count'] = 1;
+            $entry['updatedAt'] = gmdate('c');
+            $vendors[] = $entry;
+        }
+
+        $memory['vendors'] = $vendors;
+        if (!save_vendor_memory($memory)) {
+            respond(['ok' => false, 'error' => 'Failed to save vendor memory.'], 500);
+        }
+
+        respond(['ok' => true, 'vendors' => $vendors]);
     }
 
     if ($action === 'log') {

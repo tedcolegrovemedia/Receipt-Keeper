@@ -2,6 +2,101 @@ function normalizeText(value) {
   return String(value || "").toLowerCase();
 }
 
+function normalizeLine(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeVendorKey(value) {
+  return normalizeLine(value).replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function extractVendorSignals(text, vendor) {
+  if (!text || !vendor) return null;
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line.length > 2);
+  const addressRegex =
+    /\b(\d{1,5}\s+\S+|street|st\.|avenue|ave\.|road|rd\.|boulevard|blvd\.|lane|ln\.|drive|dr\.|suite|ste\.|floor|fl\.|stra(?:ss|\u00df)e|str\.)\b/i;
+  const cityStateRegex = /\b[A-Za-z .'-]+,\s*[A-Z]{2}\b/;
+  const postalRegex = /\b\d{5}(?:-\d{4})?\b/;
+
+  const domains = new Set();
+  const emailRegex = /[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})/gi;
+  const urlRegex = /(https?:\/\/)?(www\.)?([A-Z0-9.-]+\.[A-Z]{2,})/gi;
+
+  let match;
+  while ((match = emailRegex.exec(text)) !== null) {
+    domains.add(match[1].toLowerCase());
+  }
+  while ((match = urlRegex.exec(text)) !== null) {
+    if (match[3]) domains.add(match[3].toLowerCase());
+  }
+
+  const addressLines = [];
+  lines.forEach((line) => {
+    if (addressLines.length >= 4) return;
+    if (addressRegex.test(line) || cityStateRegex.test(line) || postalRegex.test(line)) {
+      addressLines.push(normalizeLine(line));
+    }
+  });
+
+  const topLines = lines
+    .slice(0, 6)
+    .map((line) => normalizeLine(line))
+    .filter((line) => line.length > 0 && line.length <= 80);
+
+  const tokens = normalizeVendorKey(vendor)
+    .split(/\s+/)
+    .filter((token) => token.length > 2);
+
+  return {
+    vendor,
+    domains: Array.from(domains),
+    addresses: addressLines,
+    lines: topLines,
+    tokens,
+  };
+}
+
+function matchVendorFromMemory(text, memory) {
+  if (!text || !Array.isArray(memory) || memory.length === 0) return null;
+  const normalizedText = normalizeText(text);
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => normalizeLine(line))
+    .filter(Boolean);
+
+  let best = null;
+  memory.forEach((entry) => {
+    if (!entry || !entry.vendor) return;
+    let score = 0;
+    const domains = Array.isArray(entry.domains) ? entry.domains : [];
+    const addresses = Array.isArray(entry.addresses) ? entry.addresses : [];
+    const snippets = Array.isArray(entry.lines) ? entry.lines : [];
+    const tokens = Array.isArray(entry.tokens) ? entry.tokens : [];
+
+    if (domains.some((domain) => normalizedText.includes(domain))) score += 5;
+    if (addresses.some((addr) => normalizedText.includes(addr))) score += 3;
+    if (snippets.some((snippet) => normalizedText.includes(snippet))) score += 2;
+    if (tokens.length > 0 && tokens.every((token) => normalizedText.includes(token))) score += 1;
+    if (typeof entry.count === "number" && entry.count > 2) score += 1;
+    if (score <= 0) return;
+
+    if (!best || score > best.score) {
+      best = { vendor: entry.vendor, score };
+    }
+  });
+
+  if (best && best.score >= 4) {
+    return best.vendor;
+  }
+  return null;
+}
+
 function inferCategoryFromText(text, vendor) {
   const haystack = `${normalizeText(vendor)} ${normalizeText(text)}`;
   if (!haystack.trim()) return "";
@@ -445,7 +540,9 @@ function parseLocationFromText(text) {
 function buildOcrSuggestions(text) {
   const date = parseDateFromText(text);
   const total = parseTotalFromText(text);
-  const vendor = parseVendorFromText(text);
+  const memory = Array.isArray(window.vendorMemory) ? window.vendorMemory : [];
+  const learnedVendor = matchVendorFromMemory(text, memory);
+  const vendor = learnedVendor || parseVendorFromText(text);
   const location = parseLocationFromText(text);
   const suggestions = { date, total, vendor, location };
   const hasAny = Object.values(suggestions).some((value) => value !== null && value !== undefined);
