@@ -1845,7 +1845,7 @@ function parseVendorFromText(text) {
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter((line) => line.length > 2);
   const skipRegex =
-    /(invoice|date|paid|total|amount|balance|tax|change|visa|mastercard|amex|cash|subtotal|payment|receipt|vat|email|plan)/i;
+    /(invoice|date|paid|total|amount|balance|tax|change|visa|mastercard|amex|cash|subtotal|payment|receipt|vat|email)/i;
   const companyRegex =
     /\b(inc|llc|l\.l\.c\.|corp|corporation|company|co\.|ltd|limited|gmbh|sarl|sa|plc|bv|oy|ab|ag|kg|pte|llp)\b/i;
   const emailRegex = /@/;
@@ -1857,10 +1857,34 @@ function parseVendorFromText(text) {
   const isSkippable = (line) =>
     skipRegex.test(line) || emailRegex.test(line) || urlRegex.test(line) || postalRegex.test(line);
   const isAddress = (line) => addressRegex.test(line);
+  const stripPrefixes = (line) =>
+    line
+      .replace(/^(invoice|invoice number|date paid|date|paid|payment|bill to|sold by|from|vendor|merchant)\b[:\s-]*/i, "")
+      .trim();
+  const extractCompanyLine = (line) => {
+    let candidate = line;
+    const addressMatch = candidate.match(addressRegex);
+    if (addressMatch && addressMatch.index !== undefined) {
+      candidate = candidate.slice(0, addressMatch.index).trim();
+    }
+    candidate = stripPrefixes(candidate);
+    if (candidate.length <= 2) return null;
+    const match = candidate.match(
+      /([A-Za-z0-9&.,'’\- ]{2,80}\b(inc|llc|l\.l\.c\.|corp|corporation|company|co\.|ltd|limited|gmbh|sarl|sa|plc|bv|oy|ab|ag|kg|pte|llp)\b)/i
+    );
+    if (match) {
+      return match[1].replace(/\s{2,}/g, " ").trim().slice(0, 40);
+    }
+    return null;
+  };
 
   for (const line of lines) {
-    if (companyRegex.test(line) && !isSkippable(line) && !isAddress(line)) {
-      return line.slice(0, 40);
+    if (companyRegex.test(line)) {
+      const extracted = extractCompanyLine(line);
+      if (extracted) return extracted;
+      if (!isAddress(line) && !emailRegex.test(line) && !urlRegex.test(line)) {
+        return stripPrefixes(line).slice(0, 40);
+      }
     }
   }
 
@@ -1869,14 +1893,17 @@ function parseVendorFromText(text) {
     for (let j = i + 1; j < lines.length; j += 1) {
       const candidate = lines[j];
       if (!/[A-Za-z]/.test(candidate)) continue;
-      if (isSkippable(candidate) || isAddress(candidate)) continue;
-      return candidate.slice(0, 40);
+      if (emailRegex.test(candidate) || urlRegex.test(candidate)) continue;
+      if (isAddress(candidate)) continue;
+      const cleaned = stripPrefixes(candidate);
+      if (cleaned) return cleaned.slice(0, 40);
     }
   }
 
   for (const line of lines) {
-    if (/[A-Za-z]/.test(line) && !isSkippable(line) && !isAddress(line)) {
-      return line.slice(0, 40);
+    if (/[A-Za-z]/.test(line) && !emailRegex.test(line) && !urlRegex.test(line)) {
+      if (isAddress(line)) continue;
+      if (!isSkippable(line)) return line.slice(0, 40);
     }
   }
   return null;
