@@ -47,6 +47,10 @@ require_once __DIR__ . '/guard.php';
             <span class="stat-value" id="receiptTotal">$0.00</span>
           </div>
           <div class="stat">
+            <span class="stat-label">OCR remaining</span>
+            <span class="stat-value" id="ocrRemaining">—</span>
+          </div>
+          <div class="stat">
             <span class="stat-label">Year</span>
             <select id="yearSelect" class="year-select"></select>
           </div>

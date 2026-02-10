@@ -491,23 +491,6 @@ body::before {
   color: var(--muted);
 }
 
-.bulk-ocr-status {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.bulk-ocr-status[data-state="running"] {
-  color: var(--accent-strong);
-}
-
-.bulk-ocr-status[data-state="applied"] {
-  color: var(--accent-strong);
-}
-
-.bulk-ocr-status[data-state="failed"] {
-  color: var(--warning);
-}
-
 .bulk-card.invalid {
   border-color: var(--warning);
   box-shadow: 0 0 0 2px rgba(182, 93, 58, 0.15);

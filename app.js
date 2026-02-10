@@ -77,6 +77,7 @@ const elements = {
   emptyState: document.getElementById("emptyState"),
   receiptCount: document.getElementById("receiptCount"),
   receiptTotal: document.getElementById("receiptTotal"),
+  ocrRemaining: document.getElementById("ocrRemaining"),
   searchInput: document.getElementById("searchInput"),
   exportCsv: document.getElementById("exportCsv"),
   yearFilters: document.getElementById("yearFilters"),
@@ -347,6 +348,38 @@ async function apiRequest(action, options = {}) {
   return data;
 }
 
+function isVeryfiConfigured() {
+  return storage.mode === "server" && storage.veryfiAvailable;
+}
+
+function isVeryfiExhausted() {
+  return (
+    isVeryfiConfigured() &&
+    typeof storage.veryfiRemaining === "number" &&
+    storage.veryfiRemaining <= 0
+  );
+}
+
+function updateOcrRemaining() {
+  if (!elements.ocrRemaining) return;
+  if (!isVeryfiConfigured()) {
+    elements.ocrRemaining.textContent = "—";
+    elements.ocrRemaining.title = "";
+    return;
+  }
+  if (typeof storage.veryfiRemaining === "number") {
+    elements.ocrRemaining.textContent = storage.veryfiRemaining.toString();
+    if (typeof storage.veryfiLimit === "number" && storage.veryfiLimit > 0) {
+      elements.ocrRemaining.title = `${storage.veryfiRemaining}/${storage.veryfiLimit} remaining`;
+    } else {
+      elements.ocrRemaining.title = "";
+    }
+    return;
+  }
+  elements.ocrRemaining.textContent = "—";
+  elements.ocrRemaining.title = "";
+}
+
 async function withStore(mode, callback) {
   const db = await getDb();
   return new Promise((resolve, reject) => {
@@ -529,14 +562,6 @@ function renderBulkList() {
 
     header.append(left, actions);
 
-    let ocrStatus = null;
-    if (item.ocrMessage) {
-      ocrStatus = document.createElement("div");
-      ocrStatus.className = "bulk-ocr-status";
-      ocrStatus.dataset.state = item.ocrStatus || "";
-      ocrStatus.textContent = item.ocrMessage;
-    }
-
     const fields = document.createElement("div");
     fields.className = "bulk-fields";
 
@@ -627,11 +652,7 @@ function renderBulkList() {
       errorMsg.textContent = `Missing: ${item.errors.join(", ")}`;
     }
 
-    if (ocrStatus) {
-      card.append(header, ocrStatus, fields, errorMsg);
-    } else {
-      card.append(header, fields, errorMsg);
-    }
+    card.append(header, fields, errorMsg);
     elements.bulkList.append(card);
   });
 }
@@ -1008,7 +1029,7 @@ function getVeryfiBlockReason() {
   if (!storage.veryfiAvailable) {
     return "Veryfi not configured.";
   }
-  if (typeof storage.veryfiRemaining === "number" && storage.veryfiRemaining <= 0) {
+  if (isVeryfiExhausted()) {
     if (storage.veryfiLimit) {
       return `Veryfi limit reached (${storage.veryfiLimit}).`;
     }
@@ -1018,16 +1039,13 @@ function getVeryfiBlockReason() {
 }
 
 function shouldRunVeryfi() {
-  return (
-    storage.ocrDefaultEnabled &&
-    storage.mode === "server" &&
-    storage.veryfiAvailable &&
-    !(typeof storage.veryfiRemaining === "number" && storage.veryfiRemaining <= 0)
-  );
+  return storage.ocrDefaultEnabled && isVeryfiConfigured() && !isVeryfiExhausted();
 }
 
 function shouldRunLocalOcr() {
-  return storage.ocrDefaultEnabled;
+  if (!storage.ocrDefaultEnabled) return false;
+  if (isVeryfiExhausted()) return false;
+  return storage.mode === "local" || !isVeryfiConfigured();
 }
 
 function buildOcrSummary(suggestions) {
@@ -1236,6 +1254,7 @@ async function runVeryfiOcrForFile(file) {
   if (typeof data.veryfiLimit === "number") {
     storage.veryfiLimit = data.veryfiLimit;
   }
+  updateOcrRemaining();
   return { text: (data.text || "").trim(), suggestions: data.suggestions || null };
 }
 
@@ -1689,6 +1708,7 @@ async function init() {
     setPreviewMessage("IndexedDB is not supported in this browser.");
     return;
   }
+  updateOcrRemaining();
 
   document.addEventListener("dragover", (event) => {
     event.preventDefault();
