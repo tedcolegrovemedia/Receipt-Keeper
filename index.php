@@ -105,9 +105,6 @@ require_once __DIR__ . '/guard.php';
           </div>
           <div class="ocr-actions">
             <button class="btn" id="runOcr" type="button" disabled>Run OCR</button>
-            <button class="btn ghost" id="applyOcr" type="button" disabled>
-              Apply OCR Suggestions
-            </button>
           </div>
           <div class="ocr-progress" id="ocrProgress"></div>
           <textarea

@@ -65,7 +65,6 @@ const elements = {
   previewDrop: document.getElementById("previewDrop"),
   ocrToggle: document.getElementById("ocrToggle"),
   runOcr: document.getElementById("runOcr"),
-  applyOcr: document.getElementById("applyOcr"),
   ocrProgress: document.getElementById("ocrProgress"),
   ocrText: document.getElementById("ocrText"),
   ocrProvider: document.getElementById("ocrProvider"),
@@ -929,7 +928,6 @@ function resetOcrState() {
   state.ocrSuggestions = null;
   elements.ocrText.value = "";
   elements.ocrProgress.textContent = "";
-  elements.applyOcr.disabled = true;
 }
 
 function setOcrReadyState() {
@@ -1169,6 +1167,7 @@ async function runLocalOcr() {
     elements.ocrText.value = state.ocrText || "(No text detected)";
     state.ocrSuggestions = buildOcrSuggestions(state.ocrText);
     if (state.ocrSuggestions) {
+      applySuggestions();
       const summary = [];
       if (state.ocrSuggestions.date) summary.push(`Date: ${state.ocrSuggestions.date}`);
       if (state.ocrSuggestions.vendor) summary.push(`Vendor: ${state.ocrSuggestions.vendor}`);
@@ -1176,11 +1175,9 @@ async function runLocalOcr() {
       if (state.ocrSuggestions.total !== null && state.ocrSuggestions.total !== undefined) {
         summary.push(`Total: ${formatCurrency(state.ocrSuggestions.total)}`);
       }
-      elements.ocrProgress.textContent = `Suggestions ready. ${summary.join(" · ")}`;
-      elements.applyOcr.disabled = false;
+      elements.ocrProgress.textContent = `Applied suggestions. ${summary.join(" · ")}`;
     } else {
       elements.ocrProgress.textContent = "OCR complete. No suggestions found.";
-      elements.applyOcr.disabled = true;
     }
   } catch (error) {
     elements.ocrProgress.textContent = `OCR failed: ${error.message}`;
@@ -1217,6 +1214,7 @@ async function runVeryfiOcr() {
     updateVeryfiStatus();
 
     if (state.ocrSuggestions) {
+      applySuggestions();
       const summary = [];
       if (state.ocrSuggestions.date) summary.push(`Date: ${state.ocrSuggestions.date}`);
       if (state.ocrSuggestions.vendor) summary.push(`Vendor: ${state.ocrSuggestions.vendor}`);
@@ -1224,11 +1222,9 @@ async function runVeryfiOcr() {
       if (state.ocrSuggestions.total !== null && state.ocrSuggestions.total !== undefined) {
         summary.push(`Total: ${formatCurrency(state.ocrSuggestions.total)}`);
       }
-      elements.ocrProgress.textContent = `Suggestions ready. ${summary.join(" · ")}`;
-      elements.applyOcr.disabled = false;
+      elements.ocrProgress.textContent = `Applied suggestions. ${summary.join(" · ")}`;
     } else {
       elements.ocrProgress.textContent = "OCR complete. No suggestions found.";
-      elements.applyOcr.disabled = true;
     }
   } catch (error) {
     elements.ocrProgress.textContent = `Veryfi OCR failed: ${error.message}`;
@@ -1683,7 +1679,6 @@ async function init() {
   attachZoomHandlers(elements.previewDrop, elements.previewImage, previewZoom);
 
   elements.runOcr.addEventListener("click", runOcr);
-  elements.applyOcr.addEventListener("click", applySuggestions);
 
   elements.receiptForm.addEventListener("submit", async (event) => {
     event.preventDefault();
