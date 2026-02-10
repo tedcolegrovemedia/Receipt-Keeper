@@ -3,7 +3,20 @@ const STORE_NAME = "receipts";
 const DB_VERSION = 1;
 const PAGE_SIZE = 10;
 const OCR_MAX_DIM = 1600;
-const PDFJS_CDN = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.js";
+const PDFJS_SOURCES = [
+  {
+    script: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.js",
+    worker: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js",
+  },
+  {
+    script: "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.js",
+    worker: "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.js",
+  },
+  {
+    script: "https://unpkg.com/pdfjs-dist@4.2.67/build/pdf.min.js",
+    worker: "https://unpkg.com/pdfjs-dist@4.2.67/build/pdf.worker.min.js",
+  },
+];
 
 const CURRENT_YEAR = new Date().getFullYear().toString();
 const OCR_OVERRIDE_KEY = "receipt_ocr_override";
@@ -585,21 +598,36 @@ function setOcrProgressForToken(token, options = {}) {
   setOcrProgressState(options);
 }
 
-async function loadPdfJs() {
-  if (state.pdfLoaded) return;
-  await new Promise((resolve, reject) => {
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = PDFJS_CDN;
+    script.src = src;
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load PDF reader."));
+    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
     document.head.appendChild(script);
   });
-  if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js";
+}
+
+async function loadPdfJs() {
+  if (state.pdfLoaded) return;
+  let lastError = null;
+  for (const source of PDFJS_SOURCES) {
+    try {
+      await loadScript(source.script);
+      if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = source.worker;
+      }
+      if (window.pdfjsLib && window.pdfjsLib.getDocument) {
+        state.pdfLoaded = true;
+        return;
+      }
+      lastError = new Error("PDF reader loaded but pdfjsLib was not found.");
+    } catch (error) {
+      lastError = error;
+    }
   }
-  state.pdfLoaded = true;
+  throw lastError || new Error("Failed to load PDF reader.");
 }
 
 async function extractPdfText(file, token) {
@@ -1866,6 +1894,31 @@ async function autoRunOcrForCurrentFile(token) {
       setOcrProgressForToken(token, { active: false });
     } catch (error) {
       if (!isActiveToken(token)) return;
+      if (canVeryfi) {
+        setOcrStatusForToken(token, "OCR: PDF text failed, trying Veryfi...");
+        setOcrProgressForToken(token, { active: true, indeterminate: true });
+        try {
+          const { text, suggestions } = await runVeryfiOcrForFile(state.currentFile);
+          if (!isActiveToken(token)) return;
+          state.ocrText = text;
+          state.ocrSuggestions = suggestions || null;
+          if (state.ocrSuggestions) {
+            applySuggestions();
+            const summary = buildOcrSummary(state.ocrSuggestions);
+            setOcrStatusForToken(token, summary ? `OCR: applied. ${summary}` : "OCR: applied.");
+          } else {
+            setOcrStatusForToken(token, "OCR: no suggestions.");
+          }
+          setOcrProgressForToken(token, { active: false });
+          return;
+        } catch (veryfiError) {
+          if (!isActiveToken(token)) return;
+          setOcrStatusForToken(token, `OCR: ${veryfiError.message}`);
+          setOcrProgressForToken(token, { active: false });
+          logClientError("Veryfi OCR failed after PDF fallback", { error: veryfiError.message });
+          return;
+        }
+      }
       setOcrStatusForToken(token, `OCR: ${error.message}`);
       setOcrProgressForToken(token, { active: false });
       logClientError("PDF text extraction failed", { error: error.message });
