@@ -3,6 +3,7 @@ const STORE_NAME = "receipts";
 const DB_VERSION = 1;
 const PAGE_SIZE = 10;
 const OCR_MAX_DIM = 1600;
+const PDFJS_CDN = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.js";
 
 const CURRENT_YEAR = new Date().getFullYear().toString();
 const OCR_OVERRIDE_KEY = "receipt_ocr_override";
@@ -60,6 +61,7 @@ const state = {
   ocrText: "",
   ocrSuggestions: null,
   ocrLoaded: false,
+  pdfLoaded: false,
   previewMetaBase: "Choose a photo to preview.",
   ocrStatusText: "",
   currentYear: CURRENT_YEAR,
@@ -535,6 +537,10 @@ function updateOcrStatusLabel() {
     elements.ocrStatus.textContent = "OCR: local (manual)";
     return;
   }
+  if (override === "auto") {
+    elements.ocrStatus.textContent = shouldRunVeryfi() ? "OCR: Veryfi" : "OCR: local";
+    return;
+  }
   if (shouldRunVeryfi()) {
     elements.ocrStatus.textContent = "OCR: Veryfi";
     return;
@@ -577,6 +583,43 @@ function setOcrProgressState({ active, value, indeterminate } = {}) {
 function setOcrProgressForToken(token, options = {}) {
   if (!isActiveToken(token)) return;
   setOcrProgressState(options);
+}
+
+async function loadPdfJs() {
+  if (state.pdfLoaded) return;
+  await new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = PDFJS_CDN;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load PDF reader."));
+    document.head.appendChild(script);
+  });
+  if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js";
+  }
+  state.pdfLoaded = true;
+}
+
+async function extractPdfText(file, token) {
+  setOcrStatusForToken(token, "OCR: reading PDF...");
+  setOcrProgressForToken(token, { active: true, indeterminate: true });
+  await loadPdfJs();
+  const buffer = await file.arrayBuffer();
+  if (!window.pdfjsLib) {
+    throw new Error("PDF reader not available.");
+  }
+  const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
+  let text = "";
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
+    if (!isActiveToken(token)) return "";
+    const page = await pdf.getPage(pageNum);
+    const content = await page.getTextContent();
+    const pageText = content.items.map((item) => item.str || "").join(" ");
+    text += `${pageText}\n`;
+  }
+  return text.trim();
 }
 
 function logClientError(message, context = {}) {
@@ -1780,11 +1823,54 @@ async function autoRunOcrForCurrentFile(token) {
       return;
     }
     if (isPdfFile(state.currentFile)) {
-      setOcrStatusForToken(token, "OCR: PDF requires Veryfi.");
-      setOcrProgressForToken(token, { active: false });
-      logClientError("Local OCR skipped for PDF", { reason: "PDF requires Veryfi" });
+      try {
+        const text = await extractPdfText(state.currentFile, token);
+        if (!isActiveToken(token)) return;
+        state.ocrText = text;
+        state.ocrSuggestions = buildOcrSuggestions(text);
+        if (state.ocrSuggestions) {
+          applySuggestions();
+          const summary = buildOcrSummary(state.ocrSuggestions);
+          setOcrStatusForToken(token, summary ? `OCR: applied. ${summary}` : "OCR: applied.");
+        } else {
+          setOcrStatusForToken(token, "OCR: no suggestions.");
+        }
+        setOcrProgressForToken(token, { active: false });
+      } catch (error) {
+        if (!isActiveToken(token)) return;
+        setOcrStatusForToken(token, `OCR: ${error.message}`);
+        setOcrProgressForToken(token, { active: false });
+        logClientError("PDF text extraction failed", { error: error.message });
+      }
       return;
     }
+  }
+
+  if (override === "veryfi" && isPdfFile(state.currentFile)) {
+    setOcrStatusForToken(token, "OCR: using Veryfi for PDF...");
+  }
+
+  if (override === "auto" && isPdfFile(state.currentFile)) {
+    try {
+      const text = await extractPdfText(state.currentFile, token);
+      if (!isActiveToken(token)) return;
+      state.ocrText = text;
+      state.ocrSuggestions = buildOcrSuggestions(text);
+      if (state.ocrSuggestions) {
+        applySuggestions();
+        const summary = buildOcrSummary(state.ocrSuggestions);
+        setOcrStatusForToken(token, summary ? `OCR: applied. ${summary}` : "OCR: applied.");
+      } else {
+        setOcrStatusForToken(token, "OCR: no suggestions.");
+      }
+      setOcrProgressForToken(token, { active: false });
+    } catch (error) {
+      if (!isActiveToken(token)) return;
+      setOcrStatusForToken(token, `OCR: ${error.message}`);
+      setOcrProgressForToken(token, { active: false });
+      logClientError("PDF text extraction failed", { error: error.message });
+    }
+    return;
   }
 
   if ((override === "veryfi" || override === "auto") && canVeryfi) {
