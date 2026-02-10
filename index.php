@@ -19,9 +19,7 @@ require_once __DIR__ . '/guard.php';
   <body>
     <main class="app">
       <nav class="top-nav">
-        <div class="nav-brand">
-          <span class="nav-title">Receipt Logger</span>
-        </div>
+        <div class="nav-brand"></div>
         <div class="nav-actions">
           <button class="btn ghost small" id="themeToggle" type="button" aria-pressed="false">
             Dark mode

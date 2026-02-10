@@ -119,12 +119,6 @@ body.dark::before {
   align-items: center;
 }
 
-.nav-title {
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-
 
 .nav-actions {
   display: flex;
