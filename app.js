@@ -80,6 +80,7 @@ const state = {
   processToken: 0,
   modalUrl: null,
   modalReceipt: null,
+  pdfObjectUrls: [],
 };
 
 function createZoomState() {
@@ -615,12 +616,44 @@ function resolveAssetUrl(path) {
   }
 }
 
-async function loadPdfModule(src) {
-  const module = await import(src);
+function trackPdfObjectUrl(url) {
+  if (!url) return;
+  state.pdfObjectUrls.push(url);
+}
+
+async function fetchText(url) {
+  const response = await fetch(url, { credentials: "same-origin" });
+  if (!response.ok) {
+    throw new Error(`Failed to load script: ${url}`);
+  }
+  return response.text();
+}
+
+function normalizePdfModule(module) {
   if (module && module.default && module.default.getDocument) {
     return module.default;
   }
   return module;
+}
+
+async function loadPdfModuleWithFallback(src) {
+  try {
+    const module = await import(src);
+    return normalizePdfModule(module);
+  } catch (error) {
+    const source = await fetchText(src);
+    const blobUrl = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+    trackPdfObjectUrl(blobUrl);
+    const module = await import(blobUrl);
+    return normalizePdfModule(module);
+  }
+}
+
+async function loadPdfWorkerBlob(src) {
+  const source = await fetchText(src);
+  const blobUrl = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+  trackPdfObjectUrl(blobUrl);
+  return blobUrl;
 }
 
 async function loadPdfJs() {
@@ -630,16 +663,18 @@ async function loadPdfJs() {
     try {
       const scriptUrl = resolveAssetUrl(source.script);
       const workerUrl = resolveAssetUrl(source.worker);
+      let workerSrc = workerUrl;
       if (source.script.endsWith(".mjs")) {
-        const pdfModule = await loadPdfModule(scriptUrl);
+        const pdfModule = await loadPdfModuleWithFallback(scriptUrl);
         if (pdfModule) {
           window.pdfjsLib = pdfModule;
         }
+        workerSrc = await loadPdfWorkerBlob(workerUrl);
       } else {
         await loadScript(scriptUrl);
       }
       if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
       }
       if (window.pdfjsLib && window.pdfjsLib.getDocument) {
         state.pdfLoaded = true;
