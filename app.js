@@ -478,6 +478,22 @@ function updateOcrRemaining() {
   elements.ocrRemaining.title = "";
 }
 
+function logClientError(message, context = {}) {
+  if (!message) return;
+  if (storage.mode !== "server") return;
+  const payload = {
+    message: String(message),
+    context: context && typeof context === "object" ? context : { value: String(context) },
+    url: window.location.href,
+  };
+  fetch("api.php?action=log", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+}
+
 async function withStore(mode, callback) {
   const db = await getDb();
   return new Promise((resolve, reject) => {
@@ -910,6 +926,7 @@ async function saveBulkReceipts() {
     await refreshList();
   } catch (error) {
     updateBulkControls(`Save failed: ${error.message}`);
+    logClientError("Bulk save failed", { error: error.message });
   }
 }
 
@@ -1614,6 +1631,7 @@ async function autoRunOcrForCurrentFile(token) {
     } catch (error) {
       if (!isActiveToken(token)) return;
       setOcrStatusForToken(token, `OCR: ${error.message}`);
+      logClientError("Veryfi OCR failed", { error: error.message });
     }
     return;
   }
@@ -1637,6 +1655,7 @@ async function autoRunOcrForCurrentFile(token) {
     } catch (error) {
       if (!isActiveToken(token)) return;
       setOcrStatusForToken(token, `OCR: ${error.message}`);
+      logClientError("Local OCR failed", { error: error.message });
     }
     return;
   }
@@ -2142,6 +2161,7 @@ async function init() {
       await refreshList();
     } catch (error) {
       setPreviewMessage(`Save failed: ${error.message}`);
+      logClientError("Save receipt failed", { error: error.message });
     }
   });
 
@@ -2253,6 +2273,7 @@ async function init() {
         if (elements.modalStatus) {
           elements.modalStatus.textContent = `Save failed: ${error.message}`;
         }
+        logClientError("Modal save failed", { error: error.message });
       }
     });
   }
@@ -2300,4 +2321,23 @@ async function init() {
 
 init().catch((error) => {
   setPreviewMessage(`Initialization failed: ${error.message}`);
+  logClientError("Initialization failed", { error: error.message, stack: error.stack || "" });
+});
+
+window.addEventListener("error", (event) => {
+  const error = event.error;
+  logClientError(event.message || "Unhandled error", {
+    filename: event.filename || "",
+    lineno: event.lineno || 0,
+    colno: event.colno || 0,
+    stack: error && error.stack ? error.stack : "",
+  });
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason;
+  logClientError("Unhandled promise rejection", {
+    reason: reason && reason.message ? reason.message : String(reason || ""),
+    stack: reason && reason.stack ? reason.stack : "",
+  });
 });

@@ -177,6 +177,45 @@ try {
         respond(['ok' => true, 'receipts' => $normalized]);
     }
 
+    if ($action === 'log') {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            respond(['ok' => false, 'error' => 'Invalid request method.'], 405);
+        }
+
+        $raw = file_get_contents('php://input');
+        $data = $raw ? json_decode($raw, true) : [];
+        if (!is_array($data)) {
+            respond(['ok' => false, 'error' => 'Invalid payload.'], 400);
+        }
+
+        $message = isset($data['message']) ? trim((string) $data['message']) : '';
+        if ($message === '') {
+            respond(['ok' => false, 'error' => 'Missing log message.'], 422);
+        }
+
+        $context = $data['context'] ?? [];
+        if (!is_array($context)) {
+            $context = ['value' => (string) $context];
+        }
+
+        $entry = [
+            'time' => gmdate('c'),
+            'ip' => $_SERVER['REMOTE_ADDR'] ?? '',
+            'userAgent' => $_SERVER['HTTP_USER_AGENT'] ?? '',
+            'url' => isset($data['url']) ? (string) $data['url'] : '',
+            'message' => $message,
+            'context' => $context,
+        ];
+
+        $logFile = DATA_DIR . '/client-error.log';
+        $line = json_encode($entry, JSON_UNESCAPED_SLASHES) . PHP_EOL;
+        if (file_put_contents($logFile, $line, FILE_APPEND | LOCK_EX) === false) {
+            respond(['ok' => false, 'error' => 'Failed to write log.'], 500);
+        }
+
+        respond(['ok' => true]);
+    }
+
     if ($action === 'save') {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             respond(['ok' => false, 'error' => 'Invalid request method.'], 405);
