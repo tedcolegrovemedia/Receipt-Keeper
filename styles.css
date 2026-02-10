@@ -40,6 +40,11 @@ body {
   min-height: 100vh;
 }
 
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
 body::before {
   content: "";
   position: fixed;
