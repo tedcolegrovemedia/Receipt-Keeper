@@ -1889,11 +1889,14 @@ function buildReceiptRow(receipt) {
   const vendorCell = document.createElement("td");
   vendorCell.textContent = receipt.vendor || "Unknown vendor";
 
+  const categoryCell = document.createElement("td");
+  categoryCell.textContent = receipt.category || "—";
+
   const totalCell = document.createElement("td");
   totalCell.className = "amount";
   totalCell.textContent = formatCurrency(Number(receipt.total) || 0);
 
-  row.append(checkboxCell, dateCell, vendorCell, totalCell);
+  row.append(checkboxCell, dateCell, vendorCell, categoryCell, totalCell);
 
   row.addEventListener("click", () => openReceiptModal(receipt));
   row.addEventListener("keydown", (event) => {

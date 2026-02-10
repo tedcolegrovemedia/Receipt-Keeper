@@ -188,6 +188,7 @@ require_once __DIR__ . '/guard.php';
                 <th class="checkbox-col"></th>
                 <th>Date</th>
                 <th>Vendor</th>
+                <th>Category</th>
                 <th class="amount">Total</th>
               </tr>
             </thead>
