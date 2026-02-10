@@ -8,10 +8,11 @@ const CURRENT_YEAR = new Date().getFullYear().toString();
 
 const state = {
   currentFile: null,
-  currentFileProcessed: false,
   ocrText: "",
   ocrSuggestions: null,
   ocrLoaded: false,
+  previewMetaBase: "Choose a photo to preview.",
+  ocrStatusText: "",
   currentYear: CURRENT_YEAR,
   currentPage: 1,
   selectedIds: new Set(),
@@ -63,12 +64,6 @@ const elements = {
   previewHint: document.getElementById("previewHint"),
   singleDrop: document.getElementById("singleDrop"),
   previewDrop: document.getElementById("previewDrop"),
-  ocrToggle: document.getElementById("ocrToggle"),
-  runOcr: document.getElementById("runOcr"),
-  ocrProgress: document.getElementById("ocrProgress"),
-  ocrText: document.getElementById("ocrText"),
-  ocrProvider: document.getElementById("ocrProvider"),
-  veryfiBadge: document.getElementById("veryfiBadge"),
   receiptForm: document.getElementById("receiptForm"),
   receiptDate: document.getElementById("receiptDate"),
   receiptVendor: document.getElementById("receiptVendor"),
@@ -283,6 +278,7 @@ function getDb() {
 async function initStorage() {
   if (window.location.protocol === "file:") {
     storage.mode = "local";
+    storage.ocrDefaultEnabled = true;
     return;
   }
   try {
@@ -296,9 +292,11 @@ async function initStorage() {
       storage.ocrDefaultEnabled = Boolean(data.ocrDefaultEnabled);
     } else {
       storage.mode = "local";
+      storage.ocrDefaultEnabled = true;
     }
   } catch (error) {
     storage.mode = "local";
+    storage.ocrDefaultEnabled = true;
   }
 }
 
@@ -605,7 +603,8 @@ async function addBulkFiles(files) {
   setBulkStatus(`Processing ${imageFiles.length} receipt${imageFiles.length === 1 ? "" : "s"}...`);
   let processedCount = 0;
   let failedCount = 0;
-  const ocrAvailable = storage.mode === "server" && storage.veryfiAvailable;
+  const ocrEnabled = storage.ocrDefaultEnabled;
+  const ocrAvailable = ocrEnabled && storage.mode === "server" && storage.veryfiAvailable;
   for (const file of imageFiles) {
     let processed = file;
     try {
@@ -616,13 +615,17 @@ async function addBulkFiles(files) {
     }
     const item = createBulkItem(processed);
     item.originalName = file.name;
-    if (!ocrAvailable) {
+    const limitReached = typeof storage.veryfiRemaining === "number" && storage.veryfiRemaining <= 0;
+    if (!ocrEnabled) {
+      item.ocrStatus = "skipped";
+      item.ocrMessage = "OCR: disabled in config.";
+    } else if (!ocrAvailable) {
       item.ocrStatus = "skipped";
       item.ocrMessage =
         storage.mode === "server"
           ? "OCR: Veryfi not configured."
           : "OCR: unavailable in local mode.";
-    } else if (typeof storage.veryfiRemaining === "number" && storage.veryfiRemaining <= 0) {
+    } else if (limitReached) {
       item.ocrStatus = "skipped";
       item.ocrMessage = "OCR: Veryfi limit reached.";
     } else {
@@ -636,7 +639,7 @@ async function addBulkFiles(files) {
 
     if (item.ocrStatus === "running") {
       try {
-        const suggestions = await runVeryfiOcrForFile(processed);
+        const { suggestions } = await runVeryfiOcrForFile(processed);
         applyOcrToBulkItem(item, suggestions);
         if (suggestions && Object.keys(suggestions).length > 0) {
           item.ocrStatus = "applied";
@@ -894,11 +897,29 @@ function attachZoomHandlers(frame, img, state) {
   frame.addEventListener("touchcancel", endTouch);
 }
 
+function updatePreviewMeta() {
+  if (!elements.previewMeta) return;
+  const base = state.previewMetaBase || "Choose a photo to preview.";
+  const ocr = state.ocrStatusText;
+  elements.previewMeta.textContent = ocr ? `${base} · ${ocr}` : base;
+}
+
+function setPreviewMessage(message) {
+  state.previewMetaBase = message || "Choose a photo to preview.";
+  updatePreviewMeta();
+}
+
+function setOcrStatus(message) {
+  state.ocrStatusText = message || "";
+  updatePreviewMeta();
+}
+
 function clearPreview() {
   elements.previewImage.src = "";
   elements.previewImage.style.display = "none";
   elements.previewPlaceholder.style.display = "block";
-  elements.previewMeta.textContent = "Choose a photo to preview.";
+  setPreviewMessage("Choose a photo to preview.");
+  setOcrStatus("");
   if (elements.previewHint) elements.previewHint.classList.add("hidden");
   resetPreviewZoom();
 }
@@ -916,7 +937,8 @@ function setPreview(file, metaText) {
   if (elements.previewHint) elements.previewHint.classList.remove("hidden");
   resetPreviewZoom();
   const name = file.name ? file.name : "receipt image";
-  elements.previewMeta.textContent = metaText || `${name} · ${formatSize(file.size)}`;
+  setPreviewMessage(metaText || `${name} · ${formatSize(file.size)}`);
+  setOcrStatus("");
   elements.previewImage.onload = () => {
     URL.revokeObjectURL(url);
     updatePreviewBaseSize();
@@ -926,56 +948,60 @@ function setPreview(file, metaText) {
 function resetOcrState() {
   state.ocrText = "";
   state.ocrSuggestions = null;
-  elements.ocrText.value = "";
-  elements.ocrProgress.textContent = "";
+  setOcrStatus("");
 }
 
-function setOcrReadyState() {
-  const enabled = elements.ocrToggle.checked && !!state.currentFile;
-  let blocked = false;
-  if (elements.ocrProvider) {
-    const wantsVeryfi = elements.ocrProvider.value === "veryfi";
-    if (wantsVeryfi) {
-      if (!storage.veryfiAvailable) {
-        elements.ocrProgress.textContent = "Veryfi not configured. Using local OCR.";
-      } else if (
-        typeof storage.veryfiRemaining === "number" &&
-        storage.veryfiRemaining <= 0 &&
-        storage.veryfiLimit &&
-        storage.veryfiLimit > 0
-      ) {
-        blocked = true;
-        elements.ocrProgress.textContent = `Veryfi monthly limit reached (${storage.veryfiLimit}). Switch to local OCR or try next month.`;
-      }
+function isActiveToken(token) {
+  return token === state.processToken;
+}
+
+function setOcrStatusForToken(token, message) {
+  if (!isActiveToken(token)) return;
+  setOcrStatus(message);
+}
+
+function getVeryfiBlockReason() {
+  if (storage.mode !== "server") {
+    return "Veryfi unavailable in local mode.";
+  }
+  if (!storage.veryfiAvailable) {
+    return "Veryfi not configured.";
+  }
+  if (typeof storage.veryfiRemaining === "number" && storage.veryfiRemaining <= 0) {
+    if (storage.veryfiLimit) {
+      return `Veryfi limit reached (${storage.veryfiLimit}).`;
+    }
+    return "Veryfi limit reached.";
+  }
+  return "";
+}
+
+function shouldRunVeryfi() {
+  return (
+    storage.ocrDefaultEnabled &&
+    storage.mode === "server" &&
+    storage.veryfiAvailable &&
+    !(typeof storage.veryfiRemaining === "number" && storage.veryfiRemaining <= 0)
+  );
+}
+
+function shouldRunLocalOcr() {
+  return storage.ocrDefaultEnabled;
+}
+
+function buildOcrSummary(suggestions) {
+  if (!suggestions) return "";
+  const summary = [];
+  if (suggestions.date) summary.push(`Date: ${suggestions.date}`);
+  if (suggestions.vendor) summary.push(`Vendor: ${suggestions.vendor}`);
+  if (suggestions.location) summary.push(`Location: ${suggestions.location}`);
+  if (suggestions.total !== null && suggestions.total !== undefined) {
+    const totalValue = Number(suggestions.total);
+    if (Number.isFinite(totalValue)) {
+      summary.push(`Total: ${formatCurrency(totalValue)}`);
     }
   }
-  elements.runOcr.disabled = !enabled || blocked;
-}
-
-function setVeryfiBadge(text, state = "off") {
-  if (!elements.veryfiBadge) return;
-  elements.veryfiBadge.textContent = text;
-  elements.veryfiBadge.dataset.state = state;
-}
-
-function updateVeryfiStatus() {
-  if (!elements.veryfiBadge) return;
-  if (storage.mode !== "server") {
-    setVeryfiBadge("Veryfi: unavailable (local mode)", "off");
-    return;
-  }
-
-  if (!storage.veryfiAvailable) {
-    setVeryfiBadge("Veryfi: not configured", "warn");
-    return;
-  }
-
-  if (storage.veryfiLimit && typeof storage.veryfiRemaining === "number") {
-    const remaining = Math.max(0, storage.veryfiRemaining);
-    setVeryfiBadge(`Veryfi: ${remaining}/${storage.veryfiLimit} left this month`, remaining > 0 ? "ok" : "error");
-  } else {
-    setVeryfiBadge("Veryfi: ready", "ok");
-  }
+  return summary.join(" · ");
 }
 
 async function loadTesseract() {
@@ -1122,116 +1148,31 @@ function applySuggestions() {
   maybeSet(elements.receiptVendor, suggestions.vendor, "vendor");
   maybeSet(elements.receiptLocation, suggestions.location, "location");
   if (suggestions.total !== null && suggestions.total !== undefined) {
-    maybeSet(elements.receiptTotalInput, suggestions.total.toFixed(2), "total");
+    const totalValue = Number(suggestions.total);
+    if (Number.isFinite(totalValue)) {
+      maybeSet(elements.receiptTotalInput, totalValue.toFixed(2), "total");
+    }
   }
 }
 
-async function runOcr() {
-  if (!state.currentFile) return;
-  const provider = elements.ocrProvider ? elements.ocrProvider.value : "local";
-  if (provider === "veryfi" && storage.veryfiAvailable) {
-    await runVeryfiOcr();
-  } else {
-    await runLocalOcr();
-  }
-}
+async function runLocalOcrForFile(file, token) {
+  setOcrStatusForToken(token, "OCR: loading...");
+  await loadTesseract();
+  setOcrStatusForToken(token, "OCR: reading...");
 
-async function runLocalOcr() {
-  elements.ocrProgress.textContent = "Loading OCR engine...";
-  elements.runOcr.disabled = true;
-  try {
-    await loadTesseract();
-    let source = state.currentFile;
-    if (!state.currentFileProcessed) {
-      elements.ocrProgress.textContent = "Preprocessing image...";
-      try {
-        source = await preprocessForOcr(state.currentFile);
-      } catch (error) {
-        elements.ocrProgress.textContent = "Preprocessing failed, using original image.";
+  const result = await Tesseract.recognize(file, "eng", {
+    logger: (message) => {
+      if (!isActiveToken(token)) return;
+      if (message.status === "recognizing text") {
+        const pct = Math.round(message.progress * 100);
+        setOcrStatusForToken(token, `OCR: ${pct}%`);
       }
-    } else {
-      elements.ocrProgress.textContent = "Using B/W image...";
-    }
+    },
+  });
 
-    elements.ocrProgress.textContent = "Reading receipt...";
-    const result = await Tesseract.recognize(source, "eng", {
-      logger: (message) => {
-        if (message.status === "recognizing text") {
-          const pct = Math.round(message.progress * 100);
-          elements.ocrProgress.textContent = `Recognizing text... ${pct}%`;
-        }
-      },
-    });
-
-    state.ocrText = result.data.text.trim();
-    elements.ocrText.value = state.ocrText || "(No text detected)";
-    state.ocrSuggestions = buildOcrSuggestions(state.ocrText);
-    if (state.ocrSuggestions) {
-      applySuggestions();
-      const summary = [];
-      if (state.ocrSuggestions.date) summary.push(`Date: ${state.ocrSuggestions.date}`);
-      if (state.ocrSuggestions.vendor) summary.push(`Vendor: ${state.ocrSuggestions.vendor}`);
-      if (state.ocrSuggestions.location) summary.push(`Location: ${state.ocrSuggestions.location}`);
-      if (state.ocrSuggestions.total !== null && state.ocrSuggestions.total !== undefined) {
-        summary.push(`Total: ${formatCurrency(state.ocrSuggestions.total)}`);
-      }
-      elements.ocrProgress.textContent = `Applied suggestions. ${summary.join(" · ")}`;
-    } else {
-      elements.ocrProgress.textContent = "OCR complete. No suggestions found.";
-    }
-  } catch (error) {
-    elements.ocrProgress.textContent = `OCR failed: ${error.message}`;
-  } finally {
-    elements.runOcr.disabled = false;
-  }
-}
-
-async function runVeryfiOcr() {
-  elements.ocrProgress.textContent = "Sending to Veryfi...";
-  elements.runOcr.disabled = true;
-  try {
-    const formData = new FormData();
-    let fileToSend = state.currentFile;
-    if (!state.currentFileProcessed) {
-      try {
-        fileToSend = await buildBwFile(state.currentFile);
-      } catch (error) {
-        throw new Error("B/W processing failed. Please try another image.");
-      }
-    }
-    formData.append("image", fileToSend);
-    const data = await apiRequest("veryfi_ocr", { method: "POST", body: formData });
-
-    state.ocrText = (data.text || "").trim();
-    elements.ocrText.value = state.ocrText || "(No text detected)";
-    state.ocrSuggestions = data.suggestions || null;
-    if (typeof data.veryfiRemaining === "number") {
-      storage.veryfiRemaining = data.veryfiRemaining;
-    }
-    if (typeof data.veryfiLimit === "number") {
-      storage.veryfiLimit = data.veryfiLimit;
-    }
-    updateVeryfiStatus();
-
-    if (state.ocrSuggestions) {
-      applySuggestions();
-      const summary = [];
-      if (state.ocrSuggestions.date) summary.push(`Date: ${state.ocrSuggestions.date}`);
-      if (state.ocrSuggestions.vendor) summary.push(`Vendor: ${state.ocrSuggestions.vendor}`);
-      if (state.ocrSuggestions.location) summary.push(`Location: ${state.ocrSuggestions.location}`);
-      if (state.ocrSuggestions.total !== null && state.ocrSuggestions.total !== undefined) {
-        summary.push(`Total: ${formatCurrency(state.ocrSuggestions.total)}`);
-      }
-      elements.ocrProgress.textContent = `Applied suggestions. ${summary.join(" · ")}`;
-    } else {
-      elements.ocrProgress.textContent = "OCR complete. No suggestions found.";
-    }
-  } catch (error) {
-    elements.ocrProgress.textContent = `Veryfi OCR failed: ${error.message}`;
-    updateVeryfiStatus();
-  } finally {
-    elements.runOcr.disabled = false;
-  }
+  const text = result.data.text.trim();
+  const suggestions = buildOcrSuggestions(text);
+  return { text, suggestions };
 }
 
 async function runVeryfiOcrForFile(file) {
@@ -1244,8 +1185,63 @@ async function runVeryfiOcrForFile(file) {
   if (typeof data.veryfiLimit === "number") {
     storage.veryfiLimit = data.veryfiLimit;
   }
-  updateVeryfiStatus();
-  return data.suggestions || null;
+  return { text: (data.text || "").trim(), suggestions: data.suggestions || null };
+}
+
+async function autoRunOcrForCurrentFile(token) {
+  if (!state.currentFile) return;
+
+  if (!storage.ocrDefaultEnabled) {
+    setOcrStatusForToken(token, "");
+    return;
+  }
+
+  if (shouldRunVeryfi()) {
+    setOcrStatusForToken(token, "OCR: running (Veryfi)...");
+    try {
+      const { text, suggestions } = await runVeryfiOcrForFile(state.currentFile);
+      if (!isActiveToken(token)) return;
+      state.ocrText = text;
+      state.ocrSuggestions = suggestions || null;
+      if (state.ocrSuggestions) {
+        applySuggestions();
+        const summary = buildOcrSummary(state.ocrSuggestions);
+        setOcrStatusForToken(token, summary ? `OCR: applied. ${summary}` : "OCR: applied.");
+      } else {
+        setOcrStatusForToken(token, "OCR: no suggestions.");
+      }
+    } catch (error) {
+      if (!isActiveToken(token)) return;
+      setOcrStatusForToken(token, `OCR: ${error.message}`);
+    }
+    return;
+  }
+
+  if (shouldRunLocalOcr()) {
+    const reason = getVeryfiBlockReason();
+    const status = reason ? `OCR: using local (${reason})...` : "OCR: running locally...";
+    setOcrStatusForToken(token, status);
+    try {
+      const { text, suggestions } = await runLocalOcrForFile(state.currentFile, token);
+      if (!isActiveToken(token)) return;
+      state.ocrText = text;
+      state.ocrSuggestions = suggestions || null;
+      if (state.ocrSuggestions) {
+        applySuggestions();
+        const summary = buildOcrSummary(state.ocrSuggestions);
+        setOcrStatusForToken(token, summary ? `OCR: applied. ${summary}` : "OCR: applied.");
+      } else {
+        setOcrStatusForToken(token, "OCR: no suggestions.");
+      }
+    } catch (error) {
+      if (!isActiveToken(token)) return;
+      setOcrStatusForToken(token, `OCR: ${error.message}`);
+    }
+    return;
+  }
+
+  const reason = getVeryfiBlockReason();
+  setOcrStatusForToken(token, reason ? `OCR: ${reason}` : "OCR: unavailable.");
 }
 
 function applyOcrToBulkItem(item, suggestions) {
@@ -1539,14 +1535,12 @@ async function refreshList() {
 
 function resetForm() {
   state.currentFile = null;
-  state.currentFileProcessed = false;
   state.processToken += 1;
   elements.receiptForm.reset();
   if (elements.receiptImage) elements.receiptImage.value = "";
   elements.receiptDate.value = todayISO();
   clearPreview();
   resetOcrState();
-  setOcrReadyState();
 }
 
 async function processSingleFile(file) {
@@ -1554,30 +1548,28 @@ async function processSingleFile(file) {
   const token = state.processToken + 1;
   state.processToken = token;
   state.currentFile = null;
-  state.currentFileProcessed = false;
   clearPreview();
-  elements.previewMeta.textContent = "Creating B/W image...";
+  setPreviewMessage("Creating B/W image...");
   try {
     const processed = await buildBwFile(file);
     if (state.processToken !== token) return;
     state.currentFile = processed;
-    state.currentFileProcessed = true;
     setPreview(processed, `${processed.name} · ${formatSize(processed.size)} (B/W)`);
   } catch (error) {
     if (state.processToken !== token) return;
     state.currentFile = null;
-    state.currentFileProcessed = false;
     clearPreview();
-    elements.previewMeta.textContent = "B/W processing failed. Please try another image.";
+    setPreviewMessage("B/W processing failed. Please try another image.");
   }
   resetOcrState();
-  setOcrReadyState();
+  void autoRunOcrForCurrentFile(token);
 }
 
 async function handleSingleDrop(files) {
   const file = pickFirstImage(files);
   if (!file) {
-    elements.previewMeta.textContent = "Please drop an image file.";
+    setPreviewMessage("Please drop an image file.");
+    setOcrStatus("");
     return;
   }
   if (elements.receiptImage) elements.receiptImage.value = "";
@@ -1624,20 +1616,9 @@ async function init() {
   clearPreview();
   await initStorage();
   if (storage.mode === "local" && !window.indexedDB) {
-    elements.previewMeta.textContent = "IndexedDB is not supported in this browser.";
+    setPreviewMessage("IndexedDB is not supported in this browser.");
     return;
   }
-  if (elements.ocrProvider) {
-    if (storage.veryfiAvailable) {
-      elements.ocrProvider.value = "veryfi";
-    } else {
-      elements.ocrProvider.value = "local";
-    }
-  }
-  if (elements.ocrToggle) {
-    elements.ocrToggle.checked = storage.ocrDefaultEnabled && storage.veryfiAvailable;
-  }
-  updateVeryfiStatus();
 
   document.addEventListener("dragover", (event) => {
     event.preventDefault();
@@ -1667,23 +1648,12 @@ async function init() {
     });
   }
 
-  elements.ocrToggle.addEventListener("change", () => {
-    setOcrReadyState();
-  });
-  if (elements.ocrProvider) {
-    elements.ocrProvider.addEventListener("change", () => {
-      setOcrReadyState();
-      updateVeryfiStatus();
-    });
-  }
   attachZoomHandlers(elements.previewDrop, elements.previewImage, previewZoom);
-
-  elements.runOcr.addEventListener("click", runOcr);
 
   elements.receiptForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!state.currentFile) {
-      elements.previewMeta.textContent = "Please add an image before saving.";
+      setPreviewMessage("Please add an image before saving.");
       return;
     }
 
@@ -1703,7 +1673,7 @@ async function init() {
       resetForm();
       await refreshList();
     } catch (error) {
-      elements.previewMeta.textContent = `Save failed: ${error.message}`;
+      setPreviewMessage(`Save failed: ${error.message}`);
     }
   });
 
@@ -1848,5 +1818,5 @@ async function init() {
 }
 
 init().catch((error) => {
-  elements.previewMeta.textContent = `Initialization failed: ${error.message}`;
+  setPreviewMessage(`Initialization failed: ${error.message}`);
 });

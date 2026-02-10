@@ -377,111 +377,6 @@ body::before {
   display: none;
 }
 
-.ocr-panel {
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
-  padding: 16px;
-  background: #fffaf4;
-  display: grid;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.ocr-header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-}
-
-.ocr-header h3 {
-  margin: 0 0 4px;
-}
-
-.ocr-header p {
-  margin: 0;
-  color: var(--muted);
-}
-
-.ocr-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.ocr-provider {
-  display: grid;
-  gap: 8px;
-  font-weight: 600;
-}
-
-.ocr-provider select {
-  border: 1px solid var(--line);
-  background: #fffdf9;
-  color: var(--ink);
-  padding: 8px 12px;
-  font-family: "Source Sans 3", sans-serif;
-}
-
-.ocr-status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border: 1px solid var(--line);
-  background: #fffdf9;
-  font-size: 0.8rem;
-  letter-spacing: 0.02em;
-  color: var(--ink);
-}
-
-.badge[data-state="ok"] {
-  background: #e6f2ed;
-  border-color: #7eb39e;
-  color: #2f5f52;
-}
-
-.badge[data-state="warn"] {
-  background: #fff3d9;
-  border-color: #e0b868;
-  color: #6a4d1f;
-}
-
-.badge[data-state="error"] {
-  background: #fde3e1;
-  border-color: #dc8a82;
-  color: #6a2c24;
-}
-
-.badge[data-state="off"] {
-  background: #f1efe9;
-  border-color: var(--line);
-  color: var(--muted);
-}
-
-.ocr-progress {
-  font-size: 0.9rem;
-  color: var(--muted);
-}
-
-textarea {
-  width: 100%;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  padding: 12px;
-  font-family: "Source Sans 3", sans-serif;
-  background: #fffdf9;
-  resize: vertical;
-}
-
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -680,13 +575,6 @@ input[type="search"] {
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
-}
-
-.toggle {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-  font-weight: 600;
 }
 
 .receipt-meta {

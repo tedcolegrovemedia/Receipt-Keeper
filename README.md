@@ -4,7 +4,7 @@ A lightweight, self-hosted receipt logger with OCR, bulk upload, and CSV export.
 
 ## Features
 - Capture receipts from camera or photo library
-- OCR (local Tesseract or Veryfi cloud OCR)
+- Auto OCR via Veryfi (local fallback available)
 - Bulk upload with auto-filled OCR fields
 - Year filtering, pagination, CSV export
 - Simple password-protected access
@@ -51,6 +51,12 @@ define('VERYFI_CLIENT_SECRET', 'YOUR_CLIENT_SECRET');
 
 If not configured, the app falls back to **local OCR** (Tesseract.js) in the browser.
 
+To disable OCR entirely, add this to `config.local.php`:
+
+```php
+define('OCR_DEFAULT_ENABLED', false);
+```
+
 ## Run Locally
 
 ```bash
@@ -66,6 +72,7 @@ Open: `http://127.0.0.1:8000`
 - If SQLite is not available on your host, the API will return a storage error.
 
 ## OCR Notes
+- OCR runs automatically when enabled (no UI toggle).
 - **Local OCR** runs in the browser and does not send data to third parties.
 - **Veryfi OCR** sends images to Veryfi. Make sure your API plan matches your usage.
 

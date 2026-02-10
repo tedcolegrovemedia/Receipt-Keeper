@@ -82,39 +82,6 @@ require_once __DIR__ . '/guard.php';
           </div>
         </div>
 
-        <div class="ocr-panel">
-          <div class="ocr-header">
-            <div>
-              <h3>OCR (optional)</h3>
-              <p>Extract text using OCR.</p>
-            </div>
-            <label class="toggle">
-              <input type="checkbox" id="ocrToggle" />
-              <span>Enable OCR</span>
-            </label>
-          </div>
-          <label class="ocr-provider">
-            OCR Provider
-            <select id="ocrProvider">
-              <option value="local">Local (Tesseract)</option>
-              <option value="veryfi">Veryfi (Cloud)</option>
-            </select>
-          </label>
-          <div class="ocr-status">
-            <span class="badge" id="veryfiBadge">Veryfi: checking...</span>
-          </div>
-          <div class="ocr-actions">
-            <button class="btn" id="runOcr" type="button" disabled>Run OCR</button>
-          </div>
-          <div class="ocr-progress" id="ocrProgress"></div>
-          <textarea
-            id="ocrText"
-            rows="4"
-            placeholder="OCR text will appear here..."
-            readonly
-          ></textarea>
-        </div>
-
         <form id="receiptForm" class="form-grid">
           <label>
             Date
