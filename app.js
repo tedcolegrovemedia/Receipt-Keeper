@@ -111,7 +111,7 @@ const elements = {
   previewImage: document.getElementById("previewImage"),
   previewPlaceholder: document.getElementById("previewPlaceholder"),
   previewHint: document.getElementById("previewHint"),
-  ocrWarning: document.getElementById("ocrWarning"),
+  ocrStatus: document.getElementById("ocrStatus"),
   singleDrop: document.getElementById("singleDrop"),
   previewDrop: document.getElementById("previewDrop"),
   receiptForm: document.getElementById("receiptForm"),
@@ -479,16 +479,21 @@ function updateOcrRemaining() {
   elements.ocrRemaining.title = "";
 }
 
-function updateOcrWarning() {
-  if (!elements.ocrWarning) return;
-  const shouldShow =
-    storage.ocrDefaultEnabled && storage.mode === "server" && !storage.veryfiAvailable;
-  elements.ocrWarning.hidden = !shouldShow;
-  if (shouldShow) {
-    elements.ocrWarning.textContent = "Veryfi not configured. Using local OCR.";
-  } else {
-    elements.ocrWarning.textContent = "";
+function updateOcrStatusLabel() {
+  if (!elements.ocrStatus) return;
+  if (!storage.ocrDefaultEnabled) {
+    elements.ocrStatus.textContent = "OCR: off";
+    return;
   }
+  if (storage.mode !== "server") {
+    elements.ocrStatus.textContent = "OCR: local";
+    return;
+  }
+  if (storage.veryfiAvailable) {
+    elements.ocrStatus.textContent = "OCR: Veryfi";
+    return;
+  }
+  elements.ocrStatus.textContent = "OCR: local";
 }
 
 function logClientError(message, context = {}) {
@@ -2085,7 +2090,7 @@ async function init() {
     return;
   }
   updateOcrRemaining();
-  updateOcrWarning();
+  updateOcrStatusLabel();
   populateCategorySelect(elements.receiptCategory);
   populateCategorySelect(elements.modalCategory);
   renderCategoryGuide();
