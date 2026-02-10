@@ -219,11 +219,23 @@ function init_receipts_db(PDO $db): void
             date TEXT,
             vendor TEXT,
             location TEXT,
+            business_purpose TEXT,
             total REAL,
             created_at TEXT,
             image_file TEXT
         )'
     );
+    $columns = $db->query('PRAGMA table_info(receipts)')->fetchAll(PDO::FETCH_ASSOC);
+    $hasPurpose = false;
+    foreach ($columns as $column) {
+        if (($column['name'] ?? '') === 'business_purpose') {
+            $hasPurpose = true;
+            break;
+        }
+    }
+    if (!$hasPurpose) {
+        $db->exec('ALTER TABLE receipts ADD COLUMN business_purpose TEXT');
+    }
     $db->exec('CREATE INDEX IF NOT EXISTS receipts_date_idx ON receipts(date)');
 }
 
@@ -242,8 +254,8 @@ function migrate_receipts_from_json(PDO $db): void
     }
 
     $stmt = $db->prepare(
-        'INSERT OR IGNORE INTO receipts (id, date, vendor, location, total, created_at, image_file)
-         VALUES (:id, :date, :vendor, :location, :total, :created_at, :image_file)'
+        'INSERT OR IGNORE INTO receipts (id, date, vendor, location, business_purpose, total, created_at, image_file)
+         VALUES (:id, :date, :vendor, :location, :business_purpose, :total, :created_at, :image_file)'
     );
 
     foreach ($data as $receipt) {
@@ -259,6 +271,7 @@ function migrate_receipts_from_json(PDO $db): void
             ':date' => isset($receipt['date']) ? (string) $receipt['date'] : '',
             ':vendor' => isset($receipt['vendor']) ? (string) $receipt['vendor'] : '',
             ':location' => isset($receipt['location']) ? (string) $receipt['location'] : '',
+            ':business_purpose' => isset($receipt['businessPurpose']) ? (string) $receipt['businessPurpose'] : (isset($receipt['business_purpose']) ? (string) $receipt['business_purpose'] : ''),
             ':total' => isset($receipt['total']) ? (float) $receipt['total'] : 0.0,
             ':created_at' => isset($receipt['createdAt']) ? (string) $receipt['createdAt'] : gmdate('c'),
             ':image_file' => isset($receipt['imageFile']) ? (string) $receipt['imageFile'] : '',
@@ -358,6 +371,7 @@ function map_receipt_row(array $row): array
         'date' => $row['date'] ?? '',
         'vendor' => $row['vendor'] ?? '',
         'location' => $row['location'] ?? '',
+        'businessPurpose' => $row['business_purpose'] ?? '',
         'total' => isset($row['total']) ? (float) $row['total'] : 0.0,
         'createdAt' => $row['created_at'] ?? '',
         'imageFile' => $row['image_file'] ?? '',
@@ -367,7 +381,7 @@ function map_receipt_row(array $row): array
 function fetch_all_receipts(): array
 {
     $db = get_db();
-    $stmt = $db->query('SELECT id, date, vendor, location, total, created_at, image_file FROM receipts ORDER BY date DESC, created_at DESC');
+    $stmt = $db->query('SELECT id, date, vendor, location, business_purpose, total, created_at, image_file FROM receipts ORDER BY date DESC, created_at DESC');
     $rows = $stmt ? $stmt->fetchAll() : [];
     return array_map('map_receipt_row', $rows ?: []);
 }
@@ -375,7 +389,7 @@ function fetch_all_receipts(): array
 function fetch_receipt_by_id(string $id): ?array
 {
     $db = get_db();
-    $stmt = $db->prepare('SELECT id, date, vendor, location, total, created_at, image_file FROM receipts WHERE id = :id LIMIT 1');
+    $stmt = $db->prepare('SELECT id, date, vendor, location, business_purpose, total, created_at, image_file FROM receipts WHERE id = :id LIMIT 1');
     $stmt->execute([':id' => $id]);
     $row = $stmt->fetch();
     if (!$row) {
@@ -388,14 +402,15 @@ function upsert_receipt(array $record): bool
 {
     $db = get_db();
     $stmt = $db->prepare(
-        'INSERT OR REPLACE INTO receipts (id, date, vendor, location, total, created_at, image_file)
-         VALUES (:id, :date, :vendor, :location, :total, :created_at, :image_file)'
+        'INSERT OR REPLACE INTO receipts (id, date, vendor, location, business_purpose, total, created_at, image_file)
+         VALUES (:id, :date, :vendor, :location, :business_purpose, :total, :created_at, :image_file)'
     );
     return $stmt->execute([
         ':id' => $record['id'] ?? '',
         ':date' => $record['date'] ?? '',
         ':vendor' => $record['vendor'] ?? '',
         ':location' => $record['location'] ?? '',
+        ':business_purpose' => $record['businessPurpose'] ?? '',
         ':total' => $record['total'] ?? 0,
         ':created_at' => $record['createdAt'] ?? '',
         ':image_file' => $record['imageFile'] ?? '',

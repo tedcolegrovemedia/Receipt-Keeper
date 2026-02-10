@@ -69,6 +69,7 @@ const elements = {
   receiptDate: document.getElementById("receiptDate"),
   receiptVendor: document.getElementById("receiptVendor"),
   receiptLocation: document.getElementById("receiptLocation"),
+  receiptPurpose: document.getElementById("receiptPurpose"),
   receiptTotalInput: document.getElementById("receiptTotalInput"),
   saveReceipt: document.getElementById("saveReceipt"),
   resetForm: document.getElementById("resetForm"),
@@ -95,6 +96,7 @@ const elements = {
   modalDate: document.getElementById("modalDate"),
   modalVendor: document.getElementById("modalVendor"),
   modalLocation: document.getElementById("modalLocation"),
+  modalPurpose: document.getElementById("modalPurpose"),
   modalTotal: document.getElementById("modalTotal"),
   modalMeta: document.getElementById("modalMeta"),
   modalStatus: document.getElementById("modalStatus"),
@@ -400,6 +402,7 @@ async function addReceipt(receipt) {
     formData.append("date", receipt.date || "");
     formData.append("vendor", receipt.vendor || "");
     formData.append("location", receipt.location || "");
+    formData.append("businessPurpose", receipt.businessPurpose || "");
     formData.append("total", receipt.total != null ? receipt.total.toString() : "");
     formData.append("createdAt", receipt.createdAt || "");
     if (receipt.image) {
@@ -473,6 +476,7 @@ function createBulkItem(file) {
     date: todayISO(),
     vendor: "",
     location: "",
+    businessPurpose: "",
     total: "",
     ocrStatus: "",
     ocrMessage: "",
@@ -497,6 +501,7 @@ function validateBulkItem(item) {
   const errors = [];
   if (!item.date) errors.push("date");
   if (!item.vendor.trim()) errors.push("vendor");
+  if (!item.businessPurpose.trim()) errors.push("business purpose");
   const totalValue = parseFloat(item.total);
   if (Number.isNaN(totalValue)) errors.push("total");
   return { errors, totalValue };
@@ -612,6 +617,24 @@ function renderBulkList() {
     });
     locationLabel.append(locationInput);
 
+    const purposeLabel = document.createElement("label");
+    purposeLabel.textContent = "Business Purpose";
+    const purposeInput = document.createElement("input");
+    purposeInput.type = "text";
+    purposeInput.placeholder = "Client lunch";
+    purposeInput.value = item.businessPurpose;
+    purposeInput.required = true;
+    purposeInput.addEventListener("input", () => {
+      item.businessPurpose = purposeInput.value;
+      clearOcrHighlight(purposeInput);
+      if (item.errors.length) {
+        item.errors = [];
+        card.classList.remove("invalid");
+        errorMsg.textContent = "";
+      }
+    });
+    purposeLabel.append(purposeInput);
+
     const totalLabel = document.createElement("label");
     totalLabel.textContent = "Total Spent";
     const totalInput = document.createElement("input");
@@ -632,7 +655,7 @@ function renderBulkList() {
     });
     totalLabel.append(totalInput);
 
-    fields.append(dateLabel, vendorLabel, locationLabel, totalLabel);
+    fields.append(dateLabel, vendorLabel, locationLabel, purposeLabel, totalLabel);
 
     const highlightUntil = item.ocrHighlightUntil || 0;
     if (highlightUntil > Date.now() && item.ocrHighlights) {
@@ -737,7 +760,7 @@ async function saveBulkReceipts() {
 
   if (hasErrors) {
     renderBulkList();
-    updateBulkControls("Fill in Date, Vendor, and Total for all queued receipts.");
+    updateBulkControls("Fill in Date, Vendor, Business Purpose, and Total for all queued receipts.");
     return;
   }
 
@@ -746,6 +769,7 @@ async function saveBulkReceipts() {
     date: item.date,
     vendor: item.vendor.trim(),
     location: item.location.trim(),
+    businessPurpose: item.businessPurpose.trim(),
     total: item.totalValue,
     createdAt: new Date().toISOString(),
     image: item.file,
@@ -1399,6 +1423,7 @@ function closeReceiptModal() {
   if (elements.modalDate) elements.modalDate.value = "";
   if (elements.modalVendor) elements.modalVendor.value = "";
   if (elements.modalLocation) elements.modalLocation.value = "";
+  if (elements.modalPurpose) elements.modalPurpose.value = "";
   if (elements.modalTotal) elements.modalTotal.value = "";
   state.modalReceipt = null;
   if (state.modalUrl) {
@@ -1426,6 +1451,7 @@ function openReceiptModal(receipt) {
   }
   const metaParts = [];
   if (receipt.vendor) metaParts.push(receipt.vendor);
+  if (receipt.businessPurpose) metaParts.push(receipt.businessPurpose);
   if (receipt.date) metaParts.push(receipt.date);
   if (receipt.total != null) metaParts.push(formatCurrency(Number(receipt.total)));
   if (elements.modalMeta) {
@@ -1434,6 +1460,7 @@ function openReceiptModal(receipt) {
   if (elements.modalDate) elements.modalDate.value = receipt.date || "";
   if (elements.modalVendor) elements.modalVendor.value = receipt.vendor || "";
   if (elements.modalLocation) elements.modalLocation.value = receipt.location || "";
+  if (elements.modalPurpose) elements.modalPurpose.value = receipt.businessPurpose || "";
   if (elements.modalTotal) {
     elements.modalTotal.value =
       Number.isFinite(Number(receipt.total)) ? Number(receipt.total).toFixed(2) : "";
@@ -1627,6 +1654,7 @@ function resetForm() {
   clearOcrHighlight(elements.receiptDate);
   clearOcrHighlight(elements.receiptVendor);
   clearOcrHighlight(elements.receiptLocation);
+  clearOcrHighlight(elements.receiptPurpose);
   clearOcrHighlight(elements.receiptTotalInput);
   clearPreview();
   resetOcrState();
@@ -1672,7 +1700,7 @@ async function exportCsv() {
       ? receipts
       : receipts.filter((receipt) => getReceiptYear(receipt) === state.currentYear);
   if (scoped.length === 0) return;
-  const header = ["Date", "Vendor", "Location", "Total"];
+  const header = ["Date", "Vendor", "Location", "Business Purpose", "Total"];
   let sumTotal = 0;
   const rows = scoped.map((receipt) => {
     const value = Number(receipt.total);
@@ -1681,10 +1709,11 @@ async function exportCsv() {
       receipt.date || "",
       receipt.vendor || "",
       receipt.location || "",
+      receipt.businessPurpose || "",
       formatCurrency(Number.isFinite(value) ? value : 0),
     ];
   });
-  rows.push(["", "TOTAL", "", formatCurrency(sumTotal)]);
+  rows.push(["", "TOTAL", "", "", formatCurrency(sumTotal)]);
   const csv = [header, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
     .join("\n");
@@ -1738,7 +1767,13 @@ async function init() {
     });
   }
 
-  [elements.receiptDate, elements.receiptVendor, elements.receiptLocation, elements.receiptTotalInput].forEach(
+  [
+    elements.receiptDate,
+    elements.receiptVendor,
+    elements.receiptLocation,
+    elements.receiptPurpose,
+    elements.receiptTotalInput,
+  ].forEach(
     (input) => {
       if (!input) return;
       input.addEventListener("input", () => clearOcrHighlight(input));
@@ -1753,12 +1788,18 @@ async function init() {
       setPreviewMessage("Please add an image before saving.");
       return;
     }
+    const businessPurpose = elements.receiptPurpose.value.trim();
+    if (!businessPurpose) {
+      setPreviewMessage("Please enter a business purpose.");
+      return;
+    }
 
     const receipt = {
       id: generateId(),
       date: elements.receiptDate.value,
       vendor: elements.receiptVendor.value.trim(),
       location: elements.receiptLocation.value.trim(),
+      businessPurpose,
       total: parseFloat(elements.receiptTotalInput.value),
       createdAt: new Date().toISOString(),
       image: state.currentFile,
@@ -1835,16 +1876,17 @@ async function init() {
   if (elements.modalSave) {
     elements.modalSave.addEventListener("click", async () => {
       if (!state.modalReceipt) return;
-      if (!elements.modalDate || !elements.modalVendor || !elements.modalTotal) return;
+      if (!elements.modalDate || !elements.modalVendor || !elements.modalPurpose || !elements.modalTotal) return;
 
       const date = elements.modalDate.value;
       const vendor = elements.modalVendor.value.trim();
       const location = elements.modalLocation ? elements.modalLocation.value.trim() : "";
+      const businessPurpose = elements.modalPurpose.value.trim();
       const totalValue = Number(elements.modalTotal.value);
 
-      if (!date || !vendor || !Number.isFinite(totalValue)) {
+      if (!date || !vendor || !businessPurpose || !Number.isFinite(totalValue)) {
         if (elements.modalStatus) {
-          elements.modalStatus.textContent = "Please fill Date, Vendor, and Total.";
+          elements.modalStatus.textContent = "Please fill Date, Vendor, Business Purpose, and Total.";
         }
         return;
       }
@@ -1855,6 +1897,7 @@ async function init() {
         date,
         vendor,
         location,
+        businessPurpose,
         total: totalValue,
         createdAt: existing.createdAt || new Date().toISOString(),
         image: existing.image || null,

@@ -99,6 +99,10 @@ require_once __DIR__ . '/guard.php';
             <input type="text" id="receiptLocation" placeholder="City, State" />
           </label>
           <label>
+            Business Purpose
+            <input type="text" id="receiptPurpose" placeholder="Client lunch" required />
+          </label>
+          <label>
             Total Spent
             <input
               type="number"
@@ -215,6 +219,10 @@ require_once __DIR__ . '/guard.php';
           <label>
             Location
             <input type="text" id="modalLocation" />
+          </label>
+          <label>
+            Business Purpose
+            <input type="text" id="modalPurpose" />
           </label>
           <label>
             Total
