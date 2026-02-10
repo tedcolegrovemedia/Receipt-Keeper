@@ -812,8 +812,7 @@ function applySuggestions() {
       return;
     }
     if (input.value && input.value !== value) {
-      const ok = window.confirm(`Replace ${label} with OCR suggestion (${value})?`);
-      if (ok) input.value = value;
+      input.value = value;
     }
   };
 
