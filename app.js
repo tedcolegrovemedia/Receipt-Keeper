@@ -723,6 +723,7 @@ function renderBulkList() {
     populateCategorySelect(categorySelect, item.category);
     categorySelect.addEventListener("change", () => {
       item.category = categorySelect.value;
+      clearOcrHighlight(categorySelect);
       if (item.errors.length) {
         item.errors = [];
         card.classList.remove("invalid");
@@ -777,6 +778,7 @@ function renderBulkList() {
       if (item.ocrHighlights.date) applyOcrHighlight(dateInput, remaining);
       if (item.ocrHighlights.vendor) applyOcrHighlight(vendorInput, remaining);
       if (item.ocrHighlights.location) applyOcrHighlight(locationInput, remaining);
+      if (item.ocrHighlights.category) applyOcrHighlight(categorySelect, remaining);
       if (item.ocrHighlights.total) applyOcrHighlight(totalInput, remaining);
     } else if (item.ocrHighlights) {
       item.ocrHighlights = null;
@@ -838,11 +840,20 @@ async function addBulkFiles(files) {
 
     if (item.ocrStatus === "running") {
       try {
-        const { suggestions } = await runVeryfiOcrForFile(processed);
+        const { text, suggestions } = await runVeryfiOcrForFile(processed);
         applyOcrToBulkItem(item, suggestions);
         if (suggestions && Object.keys(suggestions).length > 0) {
           item.ocrStatus = "applied";
           item.ocrMessage = "OCR: applied.";
+          if (!item.category) {
+            const inferred = inferCategoryFromText(text, suggestions?.vendor || "");
+            if (inferred) {
+              item.category = inferred;
+              item.ocrHighlights = item.ocrHighlights || {};
+              item.ocrHighlights.category = true;
+              item.ocrHighlightUntil = Date.now() + 5000;
+            }
+          }
         } else {
           item.ocrStatus = "done";
           item.ocrMessage = "OCR: no suggestions.";
@@ -1202,6 +1213,179 @@ function buildOcrSummary(suggestions) {
   return summary.join(" · ");
 }
 
+function normalizeText(value) {
+  return String(value || "").toLowerCase();
+}
+
+function inferCategoryFromText(text, vendor) {
+  const haystack = `${normalizeText(vendor)} ${normalizeText(text)}`;
+  if (!haystack.trim()) return "";
+
+  const rules = [
+    {
+      category: "Software & Subscriptions",
+      terms: [
+        "adobe",
+        "lightroom",
+        "photoshop",
+        "dropbox",
+        "google workspace",
+        "gsuite",
+        "microsoft",
+        "office 365",
+        "creative cloud",
+        "slack",
+        "figma",
+        "notion",
+        "airtable",
+        "github",
+        "aws",
+        "digitalocean",
+        "stripe",
+        "domain",
+        "hosting",
+        "subscription",
+      ],
+    },
+    {
+      category: "Equipment & Gear",
+      terms: [
+        "camera",
+        "lens",
+        "tripod",
+        "lighting",
+        "light stand",
+        "softbox",
+        "memory card",
+        "sd card",
+        "hard drive",
+        "ssd",
+        "monitor",
+        "macbook",
+        "laptop",
+        "microphone",
+        "audio",
+        "battery",
+        "canon",
+        "nikon",
+        "sony",
+        "panasonic",
+      ],
+    },
+    {
+      category: "Vehicle & Travel",
+      terms: [
+        "uber",
+        "lyft",
+        "delta",
+        "united",
+        "american airlines",
+        "southwest",
+        "hotel",
+        "airbnb",
+        "rental car",
+        "hertz",
+        "avis",
+        "enterprise",
+        "parking",
+        "toll",
+        "gas",
+        "fuel",
+        "shell",
+        "chevron",
+        "exxon",
+        "marriott",
+        "hilton",
+      ],
+    },
+    {
+      category: "Meals & Entertainment",
+      terms: [
+        "restaurant",
+        "cafe",
+        "coffee",
+        "starbucks",
+        "dunkin",
+        "chipotle",
+        "panera",
+        "ubereats",
+        "doordash",
+        "grubhub",
+        "bar",
+        "lunch",
+        "dinner",
+        "breakfast",
+      ],
+    },
+    {
+      category: "Marketing & Advertising",
+      terms: [
+        "facebook ads",
+        "instagram ads",
+        "google ads",
+        "adwords",
+        "marketing",
+        "advertising",
+        "printing",
+        "flyer",
+        "brochure",
+        "business cards",
+        "sponsored",
+        "campaign",
+      ],
+    },
+    {
+      category: "Professional Services",
+      terms: [
+        "accountant",
+        "bookkeeper",
+        "legal",
+        "law",
+        "attorney",
+        "consulting",
+        "contractor",
+        "invoice",
+        "freelance",
+        "coach",
+      ],
+    },
+    {
+      category: "Income Processing Fees",
+      terms: [
+        "stripe fee",
+        "paypal fee",
+        "square fee",
+        "processing fee",
+        "transaction fee",
+        "marketplace fee",
+      ],
+    },
+    {
+      category: "Home Office / Workspace",
+      terms: [
+        "coworking",
+        "wework",
+        "office rent",
+        "workspace",
+        "internet",
+        "utilities",
+        "electric",
+        "water",
+        "rent",
+        "mortgage",
+      ],
+    },
+  ];
+
+  for (const rule of rules) {
+    if (rule.terms.some((term) => haystack.includes(term))) {
+      return rule.category;
+    }
+  }
+
+  return "";
+}
+
 async function loadTesseract() {
   if (state.ocrLoaded) return;
   await new Promise((resolve, reject) => {
@@ -1359,6 +1543,14 @@ function applySuggestions() {
       if (maybeSet(elements.receiptTotalInput, totalValue.toFixed(2))) {
         applyOcrHighlight(elements.receiptTotalInput);
       }
+    }
+  }
+
+  if (elements.receiptCategory && !elements.receiptCategory.value) {
+    const inferred = inferCategoryFromText(state.ocrText, suggestions.vendor || "");
+    if (inferred) {
+      elements.receiptCategory.value = inferred;
+      applyOcrHighlight(elements.receiptCategory);
     }
   }
 }
