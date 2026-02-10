@@ -95,6 +95,36 @@ function veryfi_extract_field(array $data, array $keys, string $default = ''): s
     return $default;
 }
 
+function parse_city_state(string $address): string
+{
+    $addr = trim(preg_replace('/\s+/', ' ', $address));
+    if ($addr === '') {
+        return '';
+    }
+
+    if (preg_match('/([A-Za-z][A-Za-z .\'-]+),\s*([A-Z]{2})\s*\d{5}(?:-\d{4})?/', $addr, $matches)) {
+        return trim($matches[1]) . ', ' . trim($matches[2]);
+    }
+
+    $parts = array_map('trim', explode(',', $addr));
+    if (count($parts) >= 2) {
+        $statePart = $parts[count($parts) - 1];
+        $cityPart = $parts[count($parts) - 2];
+        if (preg_match('/\b([A-Z]{2})\b/', $statePart, $matches)) {
+            $state = trim($matches[1]);
+            if ($cityPart !== '' && $state !== '') {
+                return $cityPart . ', ' . $state;
+            }
+        }
+    }
+
+    if (preg_match('/([A-Za-z][A-Za-z .\'-]+)\s+([A-Z]{2})\s*\d{5}(?:-\d{4})?/', $addr, $matches)) {
+        return trim($matches[1]) . ', ' . trim($matches[2]);
+    }
+
+    return '';
+}
+
 function respond(array $payload, int $status = 200): void
 {
     http_response_code($status);
@@ -382,6 +412,12 @@ try {
                 $location = $city;
             } elseif ($state !== '') {
                 $location = $state;
+            }
+        }
+        if ($location === '') {
+            $address = veryfi_extract_field($data, ['vendor.address', 'vendor_address', 'store_address', 'address']);
+            if ($address !== '') {
+                $location = parse_city_state($address);
             }
         }
 
