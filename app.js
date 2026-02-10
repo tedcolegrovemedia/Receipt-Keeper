@@ -1846,6 +1846,9 @@ function parseVendorFromText(text) {
     .filter((line) => line.length > 2);
   const skipRegex =
     /(summary|invoice|receipt|statement|order|status|delivery|subtotal|total|amount|balance|tax|change|payment|paid|date|due|billing|billed|shipping|ship|qty|quantity|item|items|description|plan|subscription|service|card|visa|mastercard|amex|cash|paypal|transaction|fee|reference|number|id|vat|email)/i;
+  const hardSkipRegex =
+    /(order number|order date|order status|delivery on|delivery on or before|tracking number|shipment)/i;
+  const summaryLineRegex = /^summary\b/i;
   const companyRegex =
     /\b(inc|llc|l\.l\.c\.|corp|corporation|company|co\.|ltd|limited|gmbh|sarl|sa|plc|bv|oy|ab|ag|kg|pte|llp)\b/i;
   const emailRegex = /@/;
@@ -1889,10 +1892,14 @@ function parseVendorFromText(text) {
   };
   const hasLetters = (value) => /[A-Za-z]/.test(value);
   const scoreLine = (line, index, addressLineIndexes) => {
+    if (hardSkipRegex.test(line)) return null;
+    if (summaryLineRegex.test(line) && !companyRegex.test(line)) return null;
     const cleaned = normalizeCandidate(line);
     if (!cleaned || cleaned.length < 2 || cleaned.length > 80) return null;
     if (!hasLetters(cleaned)) return null;
     if (emailRegex.test(cleaned) || urlRegex.test(cleaned)) return null;
+    const labelMatches = cleaned.match(/\b[A-Za-z][A-Za-z &.]{2,}\s*:\s*\S+/g) || [];
+    if (labelMatches.length >= 2 && !companyRegex.test(cleaned)) return null;
     const hasCompany = companyRegex.test(cleaned);
     const skipMatch = skipRegex.test(cleaned);
     let score = 0;
