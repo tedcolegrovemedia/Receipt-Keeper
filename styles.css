@@ -5,12 +5,22 @@
   --ink: #1f1a17;
   --muted: #61584f;
   --panel: #fff8f0;
+  --panel-muted: #fffdf9;
+  --panel-strong: #f6efe6;
   --line: #e2d3c4;
   --accent: #2f6f65;
   --accent-strong: #20524b;
   --accent-soft: #d8eee9;
   --warning: #b65d3a;
   --shadow: 0 18px 40px rgba(18, 16, 14, 0.1);
+  --input-bg: #fffdf9;
+  --preview-bg: #fdf7f1;
+  --progress-bg: #f1efe9;
+  --drop-bg: linear-gradient(135deg, rgba(47, 111, 101, 0.12), rgba(248, 220, 192, 0.4));
+  --ocr-fill: #e6f4ea;
+  --ocr-border: #6fbf73;
+  --table-head: #f6efe6;
+  --table-row-hover: rgba(47, 111, 101, 0.08);
   --radius: 0px;
 }
 
@@ -38,6 +48,40 @@ body::before {
     linear-gradient(300deg, rgba(182, 93, 58, 0.14), transparent 50%);
   pointer-events: none;
   z-index: 0;
+}
+
+body.dark {
+  color-scheme: dark;
+  --bg: #11100e;
+  --bg-accent: #1c1a16;
+  --ink: #f2eee8;
+  --muted: #b7aca3;
+  --panel: #1a1916;
+  --panel-muted: #1f1d19;
+  --panel-strong: #24211d;
+  --line: #2f2b26;
+  --accent: #5bc4b2;
+  --accent-strong: #3ea493;
+  --accent-soft: #1e332f;
+  --warning: #e19a74;
+  --shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  --input-bg: #1f1d19;
+  --preview-bg: #1f1d19;
+  --progress-bg: #2a2620;
+  --drop-bg: linear-gradient(135deg, rgba(91, 196, 178, 0.18), rgba(35, 32, 28, 0.7));
+  --ocr-fill: #1f3b2b;
+  --ocr-border: #58b07a;
+  --table-head: #24211d;
+  --table-row-hover: rgba(91, 196, 178, 0.16);
+}
+
+body.dark {
+  background: radial-gradient(circle at top, #191815 0%, #13110f 55%, #0f0e0c 100%);
+}
+
+body.dark::before {
+  background: linear-gradient(120deg, rgba(91, 196, 178, 0.12), transparent 45%),
+    linear-gradient(300deg, rgba(225, 154, 116, 0.12), transparent 50%);
 }
 
 .app {
@@ -149,7 +193,7 @@ body::before {
 .year-select {
   appearance: none;
   border: 1px solid var(--line);
-  background: #fffdf9;
+  background: var(--input-bg);
   color: var(--accent-strong);
   padding: 8px 36px 8px 12px;
   border-radius: 999px;
@@ -228,7 +272,7 @@ body::before {
 
 .year-pill {
   border: 1px solid var(--line);
-  background: #fffdf9;
+  background: var(--panel-muted);
   color: var(--muted);
   padding: 6px 14px;
   border-radius: 999px;
@@ -256,7 +300,7 @@ body::before {
   margin-bottom: 16px;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  background: #fffdf9;
+  background: var(--panel-muted);
 }
 
 .select-all {
@@ -290,7 +334,7 @@ body::before {
   color: var(--accent-strong);
   font-weight: 600;
   cursor: pointer;
-  background: linear-gradient(135deg, rgba(47, 111, 101, 0.12), rgba(248, 220, 192, 0.4));
+  background: var(--drop-bg);
   min-height: 220px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
@@ -328,7 +372,7 @@ body::before {
   position: relative;
   border-radius: var(--radius);
   border: 1px solid var(--line);
-  background: #fdf7f1;
+  background: var(--preview-bg);
   min-height: 220px;
   overflow: hidden;
   touch-action: pan-x pan-y;
@@ -398,7 +442,7 @@ body::before {
 
 .ocr-progress {
   height: 6px;
-  background: #f1efe9;
+  background: var(--progress-bg);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -479,7 +523,7 @@ body::before {
   padding: 16px;
   display: grid;
   gap: 12px;
-  background: #fffdf9;
+  background: var(--panel-muted);
 }
 
 .bulk-card-header {
@@ -508,7 +552,7 @@ body::before {
   width: 140px;
   height: 120px;
   border: 1px solid var(--line);
-  background: #fffdf9;
+  background: var(--preview-bg);
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -611,13 +655,13 @@ select:not(.year-select) {
   padding: 10px 12px;
   font-size: 1rem;
   font-family: "Source Sans 3", sans-serif;
-  background: #fffdf9;
+  background: var(--input-bg);
   transition: background-color 0.6s ease, border-color 0.6s ease;
 }
 
 input.ocr-filled {
-  background: #e6f4ea;
-  border-color: #6fbf73;
+  background: var(--ocr-fill);
+  border-color: var(--ocr-border);
 }
 
 input[type="search"] {
@@ -665,7 +709,7 @@ input[type="search"] {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
-  background: #fffdf9;
+  background: var(--panel-muted);
 }
 
 .receipts-table table {
@@ -702,7 +746,7 @@ input[type="search"] {
 }
 
 .receipts-table tbody tr:hover {
-  background: rgba(47, 111, 101, 0.08);
+  background: var(--table-row-hover);
 }
 
 .receipts-table .amount {
@@ -710,7 +754,7 @@ input[type="search"] {
 }
 
 .receipts-table thead {
-  background: #f6efe6;
+  background: var(--table-head);
 }
 
 .receipts-table tbody tr:last-child td {
@@ -788,7 +832,7 @@ input[type="search"] {
   object-fit: contain;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: #fffdf9;
+  background: var(--preview-bg);
 }
 
 .modal-form {

@@ -24,6 +24,9 @@ require_once __DIR__ . '/guard.php';
           <span class="nav-subtitle">Private workspace</span>
         </div>
         <div class="nav-actions">
+          <button class="btn ghost small" id="themeToggle" type="button" aria-pressed="false">
+            Dark mode
+          </button>
           <a class="btn ghost" href="change-password.php">Change password</a>
           <a class="btn ghost" href="logout.php">Sign out</a>
         </div>
