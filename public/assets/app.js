@@ -94,6 +94,7 @@ const state = {
   modalReceipt: null,
   pdfObjectUrls: [],
   vendorMemory: [],
+  vendorCategoryMemory: {},
 };
 
 function createZoomState() {
@@ -680,6 +681,52 @@ function normalizeVendorKeyValue(value) {
     .trim();
 }
 
+function buildVendorCategoryMemory(receipts) {
+  const memory = {};
+  receipts.forEach((receipt) => {
+    if (!receipt || !receipt.vendor || !receipt.category) return;
+    const key = normalizeVendorKeyValue(receipt.vendor);
+    if (!key) return;
+    if (!memory[key]) {
+      memory[key] = {};
+    }
+    const counts = memory[key];
+    const category = receipt.category;
+    counts[category] = (counts[category] || 0) + 1;
+  });
+  return memory;
+}
+
+function getCategoryFromMemory(vendor) {
+  if (!vendor) return "";
+  const key = normalizeVendorKeyValue(vendor);
+  if (!key) return "";
+  const counts = state.vendorCategoryMemory[key];
+  if (!counts) return "";
+  let best = "";
+  let bestCount = 0;
+  Object.entries(counts).forEach(([category, count]) => {
+    if (count > bestCount) {
+      best = category;
+      bestCount = count;
+    }
+  });
+  return best;
+}
+
+function suggestCategory(text, vendor) {
+  let inferred = "";
+  if (typeof inferCategoryFromText === "function") {
+    try {
+      inferred = inferCategoryFromText(text || "", vendor || "") || "";
+    } catch (error) {
+      inferred = "";
+    }
+  }
+  if (inferred) return inferred;
+  return getCategoryFromMemory(vendor);
+}
+
 async function loadVendorMemory() {
   if (storage.mode !== "server") {
     try {
@@ -1102,6 +1149,14 @@ function renderBulkList() {
     vendorInput.addEventListener("input", () => {
       item.vendor = vendorInput.value;
       clearOcrHighlight(vendorInput);
+      if (!item.category) {
+        const categoryHint = suggestCategory(item.ocrText || "", item.vendor || "");
+        if (categoryHint) {
+          item.category = categoryHint;
+          categorySelect.value = categoryHint;
+          applyOcrHighlight(categorySelect);
+        }
+      }
       if (item.errors.length) {
         item.errors = [];
         card.classList.remove("invalid");
@@ -1254,18 +1309,16 @@ async function addBulkFiles(files) {
         item.ocrText = text;
         item.ocrVendor = suggestions ? suggestions.vendor : "";
         applyOcrToBulkItem(item, suggestions);
+        const categoryHint = suggestCategory(text, item.vendor || item.ocrVendor || "");
+        if (!item.category && categoryHint) {
+          item.category = categoryHint;
+          item.ocrHighlights = item.ocrHighlights || {};
+          item.ocrHighlights.category = true;
+          item.ocrHighlightUntil = Date.now() + 5000;
+        }
         if (suggestions && Object.keys(suggestions).length > 0) {
           item.ocrStatus = "applied";
           item.ocrMessage = "OCR: applied.";
-          if (!item.category) {
-            const inferred = inferCategoryFromText(text, suggestions?.vendor || "");
-            if (inferred) {
-              item.category = inferred;
-              item.ocrHighlights = item.ocrHighlights || {};
-              item.ocrHighlights.category = true;
-              item.ocrHighlightUntil = Date.now() + 5000;
-            }
-          }
         } else {
           item.ocrStatus = "done";
           item.ocrMessage = "OCR: no suggestions.";
@@ -1695,8 +1748,7 @@ async function loadTesseract() {
 }
 
 function applySuggestions() {
-  const suggestions = state.ocrSuggestions;
-  if (!suggestions) return;
+  const suggestions = state.ocrSuggestions || {};
 
   const maybeSet = (input, value) => {
     if (!value) return;
@@ -1730,7 +1782,8 @@ function applySuggestions() {
   }
 
   if (elements.receiptCategory && !elements.receiptCategory.value) {
-    const inferred = inferCategoryFromText(state.ocrText, suggestions.vendor || "");
+    const vendorHint = suggestions.vendor || elements.receiptVendor?.value || "";
+    const inferred = suggestCategory(state.ocrText, vendorHint);
     if (inferred) {
       elements.receiptCategory.value = inferred;
       applyOcrHighlight(elements.receiptCategory);
@@ -2217,6 +2270,7 @@ function buildReceiptRow(receipt) {
 
 async function refreshList() {
   const receipts = (await getAllReceipts()) || [];
+  state.vendorCategoryMemory = buildVendorCategoryMemory(receipts);
   const allIds = new Set(receipts.map((receipt) => receipt.id).filter(Boolean));
   state.selectedIds.forEach((id) => {
     if (!allIds.has(id)) {
@@ -2455,6 +2509,17 @@ async function init() {
       input.addEventListener("input", () => clearOcrHighlight(input));
     }
   );
+
+  if (elements.receiptVendor) {
+    elements.receiptVendor.addEventListener("blur", () => {
+      if (!elements.receiptCategory || elements.receiptCategory.value) return;
+      const inferred = suggestCategory(state.ocrText, elements.receiptVendor.value || "");
+      if (inferred) {
+        elements.receiptCategory.value = inferred;
+        applyOcrHighlight(elements.receiptCategory);
+      }
+    });
+  }
 
   attachZoomHandlers(elements.previewDrop, elements.previewImage, previewZoom);
 
