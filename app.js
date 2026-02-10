@@ -5,6 +5,10 @@ const PAGE_SIZE = 10;
 const OCR_MAX_DIM = 1600;
 const PDFJS_SOURCES = [
   {
+    script: "vendor/pdfjs/pdf.min.js",
+    worker: "vendor/pdfjs/pdf.worker.min.js",
+  },
+  {
     script: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.js",
     worker: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js",
   },
@@ -627,7 +631,10 @@ async function loadPdfJs() {
       lastError = error;
     }
   }
-  throw lastError || new Error("Failed to load PDF reader.");
+  throw (
+    lastError ||
+    new Error("PDF reader unavailable. Add vendor/pdfjs/pdf.min.js and pdf.worker.min.js or allow CDN access.")
+  );
 }
 
 async function extractPdfText(file, token) {

@@ -60,6 +60,14 @@ To disable OCR entirely, add this to `config.local.php`:
 define('OCR_DEFAULT_ENABLED', false);
 ```
 
+### 4) (Optional) Local PDF text extraction
+If your server blocks CDNs, download PDF.js into `vendor/pdfjs/`:
+
+```
+vendor/pdfjs/pdf.min.js
+vendor/pdfjs/pdf.worker.min.js
+```
+
 ## Run Locally
 
 ```bash
