@@ -148,7 +148,7 @@ function close_curl_handle($handle): void
 
 try {
     if (!ensure_storage_ready()) {
-        respond(['ok' => false, 'error' => 'Storage not ready. Ensure data/ is writable.'], 500);
+        respond(['ok' => false, 'error' => 'Storage not ready. Ensure data/ is writable and SQLite is available.'], 500);
     }
 
     $action = $_GET['action'] ?? '';
@@ -166,7 +166,7 @@ try {
     }
 
     if ($action === 'list') {
-        $receipts = load_receipts();
+        $receipts = fetch_all_receipts();
         $normalized = array_map(function ($receipt) {
             if (!empty($receipt['id'])) {
                 $receipt['imageUrl'] = build_image_url($receipt['id']);
@@ -198,10 +198,7 @@ try {
 
         $total = (float) $totalRaw;
 
-        $receipts = load_receipts();
-        $existingIndex = find_receipt_index($receipts, $id);
-        $existing = $existingIndex >= 0 ? $receipts[$existingIndex] : null;
-
+        $existing = fetch_receipt_by_id($id);
         $imageFile = $existing['imageFile'] ?? '';
 
         if (!empty($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE) {
@@ -268,13 +265,7 @@ try {
             'imageFile' => $imageFile,
         ];
 
-        if ($existingIndex >= 0) {
-            $receipts[$existingIndex] = $record;
-        } else {
-            $receipts[] = $record;
-        }
-
-        if (!save_receipts($receipts)) {
+        if (!upsert_receipt($record)) {
             respond(['ok' => false, 'error' => 'Failed to save receipt.'], 500);
         }
 
@@ -296,16 +287,13 @@ try {
             respond(['ok' => false, 'error' => 'Missing receipt id.'], 422);
         }
 
-        $receipts = load_receipts();
-        $index = find_receipt_index($receipts, $id);
-        if ($index < 0) {
+        $existing = fetch_receipt_by_id($id);
+        if (!$existing) {
             respond(['ok' => false, 'error' => 'Receipt not found.'], 404);
         }
 
-        $imageFile = $receipts[$index]['imageFile'] ?? '';
-        array_splice($receipts, $index, 1);
-
-        if (!save_receipts($receipts)) {
+        $imageFile = $existing['imageFile'] ?? '';
+        if (!delete_receipt_by_id($id)) {
             respond(['ok' => false, 'error' => 'Failed to delete receipt.'], 500);
         }
 

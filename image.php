@@ -10,14 +10,13 @@ if ($id === '') {
     exit;
 }
 
-$receipts = load_receipts();
-$index = find_receipt_index($receipts, $id);
-if ($index < 0) {
+$receipt = fetch_receipt_by_id($id);
+if (!$receipt) {
     http_response_code(404);
     exit;
 }
 
-$imageFile = $receipts[$index]['imageFile'] ?? '';
+$imageFile = $receipt['imageFile'] ?? '';
 if ($imageFile === '') {
     http_response_code(404);
     exit;
