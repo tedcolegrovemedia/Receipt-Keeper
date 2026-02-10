@@ -330,7 +330,7 @@ body::before {
   border: 1px solid var(--line);
   background: #fdf7f1;
   min-height: 220px;
-  overflow: auto;
+  overflow: hidden;
   touch-action: pan-x pan-y;
   display: grid;
   place-items: center;
@@ -342,17 +342,17 @@ body::before {
   object-fit: contain;
   display: none;
   cursor: zoom-in;
-  transition: width 0.2s ease;
+  transition: transform 0.15s ease;
+  transform-origin: 50% 50%;
 }
 
 .preview-frame.zoomed {
   cursor: zoom-out;
+  touch-action: none;
 }
 
 .preview-frame img.zoomed {
-  width: 200%;
-  max-width: none;
-  max-height: none;
+  transform: scale(2);
   cursor: zoom-out;
 }
 

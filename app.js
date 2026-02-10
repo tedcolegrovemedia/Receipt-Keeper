@@ -1375,12 +1375,57 @@ async function init() {
     });
   }
   if (elements.previewImage && elements.previewDrop) {
+    const updateZoomOrigin = (event) => {
+      if (!elements.previewImage.classList.contains("zoomed")) return;
+      const rect = elements.previewDrop.getBoundingClientRect();
+      const clientX = event.clientX ?? (event.touches && event.touches[0]?.clientX);
+      const clientY = event.clientY ?? (event.touches && event.touches[0]?.clientY);
+      if (clientX == null || clientY == null) return;
+      const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+      elements.previewImage.style.transformOrigin = `${(x * 100).toFixed(2)}% ${(y * 100).toFixed(2)}%`;
+    };
+
+    const resetZoomOrigin = () => {
+      elements.previewImage.style.transformOrigin = "50% 50%";
+    };
+
     elements.previewImage.addEventListener("click", () => {
       if (elements.previewImage.style.display === "none") return;
       const zoomed = elements.previewImage.classList.toggle("zoomed");
       elements.previewDrop.classList.toggle("zoomed", zoomed);
-      elements.previewDrop.scrollTop = 0;
-      elements.previewDrop.scrollLeft = 0;
+      if (!zoomed) resetZoomOrigin();
+    });
+
+    elements.previewDrop.addEventListener("mousemove", (event) => {
+      updateZoomOrigin(event);
+    });
+
+    elements.previewDrop.addEventListener("mouseleave", () => {
+      resetZoomOrigin();
+    });
+
+    elements.previewDrop.addEventListener(
+      "touchmove",
+      (event) => {
+        if (!elements.previewImage.classList.contains("zoomed")) return;
+        updateZoomOrigin(event);
+        event.preventDefault();
+      },
+      { passive: false }
+    );
+
+    elements.previewDrop.addEventListener(
+      "touchstart",
+      (event) => {
+        if (!elements.previewImage.classList.contains("zoomed")) return;
+        updateZoomOrigin(event);
+      },
+      { passive: true }
+    );
+
+    elements.previewDrop.addEventListener("touchend", () => {
+      resetZoomOrigin();
     });
   }
 
