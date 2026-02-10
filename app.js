@@ -31,6 +31,7 @@ function createZoomState() {
     baseHeight: 0,
     minScale: 1,
     maxScale: 3,
+    zoomSteps: [2, 3],
     isPinching: false,
     isPanning: false,
     startDist: 0,
@@ -781,15 +782,22 @@ function attachZoomHandlers(frame, img, state) {
   img.addEventListener("click", (event) => {
     if (!isFinePointer) return;
     if (img.style.display === "none") return;
-    if (state.mode === "mouse" && state.scale > 1) {
-      state.mode = "none";
-      state.scale = 1;
-      img.style.transformOrigin = "50% 50%";
-      applyPreviewTransform(state, frame, img);
-      return;
+    const steps = state.zoomSteps && state.zoomSteps.length ? state.zoomSteps : [2];
+    const currentIndex = steps.findIndex((value) => Math.abs(value - state.scale) < 0.01);
+    if (state.mode === "mouse" && state.scale > 1 && currentIndex >= 0) {
+      if (currentIndex < steps.length - 1) {
+        state.scale = steps[currentIndex + 1];
+      } else {
+        state.mode = "none";
+        state.scale = 1;
+        img.style.transformOrigin = "50% 50%";
+        applyPreviewTransform(state, frame, img);
+        return;
+      }
+    } else {
+      state.mode = "mouse";
+      state.scale = steps[0];
     }
-    state.mode = "mouse";
-    state.scale = 2;
     state.x = 0;
     state.y = 0;
     applyPreviewTransform(state, frame, img);
