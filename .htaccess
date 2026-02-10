@@ -2,6 +2,8 @@
   RewriteEngine On
   RewriteBase /writeoff/
 
+  DirectoryIndex public/index.php
+
   # Allow ACME challenges (if needed)
   RewriteRule ^\.well-known/ - [L]
 
@@ -17,5 +19,6 @@
   RewriteRule ^ - [L]
 
   # Route everything through /public without exposing /public in the URL
+  RewriteRule ^$ public/index.php [L]
   RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
