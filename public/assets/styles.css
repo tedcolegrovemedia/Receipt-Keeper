@@ -101,10 +101,11 @@ body.dark::before {
 
 .top-nav {
   position: fixed;
-  left: 50%;
+  left: 0;
+  right: 0;
   bottom: 20px;
-  transform: translateX(-50%);
   width: min(1080px, calc(100% - 48px));
+  margin: 0 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
