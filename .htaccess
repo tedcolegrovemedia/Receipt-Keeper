@@ -13,12 +13,14 @@
   # If already in /public, stop here
   RewriteRule ^public/ - [L]
 
+  # Route root through /public without exposing /public in the URL
+  RewriteRule ^$ public/index.php [L]
+
   # Skip existing files/dirs
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
 
   # Route everything through /public without exposing /public in the URL
-  RewriteRule ^$ public/index.php [L]
   RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
