@@ -273,6 +273,7 @@ try {
                 'image/webp' => 'webp',
                 'image/heic' => 'heic',
                 'image/heif' => 'heif',
+                'application/pdf' => 'pdf',
             ];
             $ext = $extMap[$mime] ?? '';
             if ($ext === '') {

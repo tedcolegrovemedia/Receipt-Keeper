@@ -4,6 +4,7 @@ A lightweight, self-hosted receipt logger with OCR, bulk upload, and CSV export.
 
 ## Features
 - Capture receipts from camera or photo library
+- Single upload supports PDFs (bulk is images only)
 - Auto OCR via Veryfi (local fallback available)
 - Bulk upload with auto-filled OCR fields
 - Business purpose required on every receipt

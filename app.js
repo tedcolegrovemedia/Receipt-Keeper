@@ -272,9 +272,16 @@ function isImageFile(file) {
   return ["jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "tiff"].includes(ext);
 }
 
-function pickFirstImage(files) {
+function isPdfFile(file) {
+  if (!file) return false;
+  if (file.type === "application/pdf") return true;
+  const ext = file.name ? file.name.split(".").pop().toLowerCase() : "";
+  return ext === "pdf";
+}
+
+function pickFirstReceiptFile(files) {
   const list = Array.from(files || []);
-  return list.find((file) => isImageFile(file)) || null;
+  return list.find((file) => isImageFile(file) || isPdfFile(file)) || null;
 }
 
 function setupDropTarget(target, onFiles) {
@@ -833,6 +840,10 @@ function renderBulkList() {
 async function addBulkFiles(files) {
   const fileArray = Array.from(files || []);
   if (fileArray.length === 0) return;
+  const pdfFiles = fileArray.filter((file) => isPdfFile(file));
+  if (pdfFiles.length > 0) {
+    setBulkStatus("PDFs aren't supported in bulk. Use single upload for PDFs.");
+  }
   const imageFiles = fileArray.filter((file) => isImageFile(file));
   if (imageFiles.length === 0) return;
   setBulkStatus(`Processing ${imageFiles.length} receipt${imageFiles.length === 1 ? "" : "s"}...`);
@@ -1165,6 +1176,7 @@ function clearPreview() {
   elements.previewImage.src = "";
   elements.previewImage.style.display = "none";
   elements.previewPlaceholder.style.display = "block";
+  elements.previewPlaceholder.textContent = "No image yet";
   setPreviewMessage("Choose a photo to preview.");
   setOcrStatus("");
   if (elements.previewHint) elements.previewHint.classList.add("hidden");
@@ -1190,6 +1202,22 @@ function setPreview(file, metaText) {
     URL.revokeObjectURL(url);
     updatePreviewBaseSize();
   };
+}
+
+function setPdfPreview(file, metaText) {
+  if (!file) {
+    clearPreview();
+    return;
+  }
+  elements.previewImage.src = "";
+  elements.previewImage.style.display = "none";
+  elements.previewPlaceholder.style.display = "block";
+  elements.previewPlaceholder.textContent = "PDF selected";
+  if (elements.previewHint) elements.previewHint.classList.add("hidden");
+  resetPreviewZoom();
+  const name = file.name ? file.name : "receipt PDF";
+  setPreviewMessage(metaText || `${name} · ${formatSize(file.size)} (PDF)`);
+  setOcrStatus("");
 }
 
 function resetOcrState() {
@@ -1655,6 +1683,11 @@ async function autoRunOcrForCurrentFile(token) {
   }
 
   if (shouldRunLocalOcr()) {
+    if (isPdfFile(state.currentFile)) {
+      setOcrStatusForToken(token, "OCR: PDF requires Veryfi.");
+      logClientError("Local OCR skipped for PDF", { reason: "Veryfi not configured" });
+      return;
+    }
     const reason = getVeryfiBlockReason();
     const status = reason ? `OCR: using local (${reason})...` : "OCR: running locally...";
     setOcrStatusForToken(token, status);
@@ -2017,6 +2050,13 @@ async function processSingleFile(file) {
   state.processToken = token;
   state.currentFile = null;
   clearPreview();
+  if (isPdfFile(file)) {
+    state.currentFile = file;
+    setPdfPreview(file);
+    resetOcrState();
+    void autoRunOcrForCurrentFile(token);
+    return;
+  }
   setPreviewMessage("Creating B/W image...");
   try {
     const processed = await buildBwFile(file);
@@ -2034,9 +2074,9 @@ async function processSingleFile(file) {
 }
 
 async function handleSingleDrop(files) {
-  const file = pickFirstImage(files);
+  const file = pickFirstReceiptFile(files);
   if (!file) {
-    setPreviewMessage("Please drop an image file.");
+    setPreviewMessage("Please drop an image or PDF file.");
     setOcrStatus("");
     return;
   }

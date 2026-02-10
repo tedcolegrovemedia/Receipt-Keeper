@@ -68,7 +68,7 @@ require_once __DIR__ . '/guard.php';
             <input
               id="receiptImage"
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf"
             />
             <span class="file-title">Add receipt image</span>
             <span class="file-subtitle">Drag & drop, camera, or photo library</span>
