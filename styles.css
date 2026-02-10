@@ -384,6 +384,37 @@ body::before {
   color: var(--muted);
 }
 
+.ocr-progress {
+  height: 6px;
+  background: #f1efe9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.ocr-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent-strong);
+  transition: width 0.2s ease;
+}
+
+.ocr-progress.indeterminate .ocr-progress-fill {
+  width: 35%;
+  animation: ocr-sweep 1.2s ease-in-out infinite;
+}
+
+@keyframes ocr-sweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  50% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

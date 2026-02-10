@@ -113,6 +113,8 @@ const elements = {
   previewPlaceholder: document.getElementById("previewPlaceholder"),
   previewHint: document.getElementById("previewHint"),
   ocrStatus: document.getElementById("ocrStatus"),
+  ocrProgress: document.getElementById("ocrProgress"),
+  ocrProgressFill: document.getElementById("ocrProgressFill"),
   singleDrop: document.getElementById("singleDrop"),
   previewDrop: document.getElementById("previewDrop"),
   receiptForm: document.getElementById("receiptForm"),
@@ -502,6 +504,30 @@ function updateOcrStatusLabel() {
     return;
   }
   elements.ocrStatus.textContent = "OCR: local";
+}
+
+function setOcrProgressState({ active, value, indeterminate } = {}) {
+  if (!elements.ocrProgress || !elements.ocrProgressFill) return;
+  if (!active) {
+    elements.ocrProgress.hidden = true;
+    elements.ocrProgress.classList.remove("indeterminate");
+    elements.ocrProgressFill.style.width = "0%";
+    return;
+  }
+  elements.ocrProgress.hidden = false;
+  if (indeterminate) {
+    elements.ocrProgress.classList.add("indeterminate");
+    elements.ocrProgressFill.style.width = "35%";
+    return;
+  }
+  elements.ocrProgress.classList.remove("indeterminate");
+  const pct = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+  elements.ocrProgressFill.style.width = `${pct}%`;
+}
+
+function setOcrProgressForToken(token, options = {}) {
+  if (!isActiveToken(token)) return;
+  setOcrProgressState(options);
 }
 
 function logClientError(message, context = {}) {
@@ -1240,6 +1266,7 @@ function resetOcrState() {
   state.ocrText = "";
   state.ocrSuggestions = null;
   setOcrStatus("");
+  setOcrProgressState({ active: false });
 }
 
 function isActiveToken(token) {
@@ -1636,6 +1663,7 @@ function applySuggestions() {
 
 async function runLocalOcrForFile(file, token) {
   setOcrStatusForToken(token, "OCR: loading...");
+  setOcrProgressForToken(token, { active: true, value: 0, indeterminate: false });
   await loadTesseract();
   setOcrStatusForToken(token, "OCR: reading...");
 
@@ -1645,6 +1673,7 @@ async function runLocalOcrForFile(file, token) {
       if (message.status === "recognizing text") {
         const pct = Math.round(message.progress * 100);
         setOcrStatusForToken(token, `OCR: ${pct}%`);
+        setOcrProgressForToken(token, { active: true, value: pct, indeterminate: false });
       }
     },
   });
@@ -1673,11 +1702,13 @@ async function autoRunOcrForCurrentFile(token) {
 
   if (!storage.ocrDefaultEnabled) {
     setOcrStatusForToken(token, "");
+    setOcrProgressForToken(token, { active: false });
     return;
   }
 
   if (shouldRunVeryfi()) {
     setOcrStatusForToken(token, "OCR: running (Veryfi)...");
+    setOcrProgressForToken(token, { active: true, indeterminate: true });
     try {
       const { text, suggestions } = await runVeryfiOcrForFile(state.currentFile);
       if (!isActiveToken(token)) return;
@@ -1690,9 +1721,11 @@ async function autoRunOcrForCurrentFile(token) {
       } else {
         setOcrStatusForToken(token, "OCR: no suggestions.");
       }
+      setOcrProgressForToken(token, { active: false });
     } catch (error) {
       if (!isActiveToken(token)) return;
       setOcrStatusForToken(token, `OCR: ${error.message}`);
+      setOcrProgressForToken(token, { active: false });
       logClientError("Veryfi OCR failed", { error: error.message });
     }
     return;
@@ -1701,6 +1734,7 @@ async function autoRunOcrForCurrentFile(token) {
   if (shouldRunLocalOcr()) {
     if (isPdfFile(state.currentFile)) {
       setOcrStatusForToken(token, "OCR: PDF requires Veryfi.");
+      setOcrProgressForToken(token, { active: false });
       logClientError("Local OCR skipped for PDF", { reason: "Veryfi not configured" });
       return;
     }
@@ -1719,9 +1753,11 @@ async function autoRunOcrForCurrentFile(token) {
       } else {
         setOcrStatusForToken(token, "OCR: no suggestions.");
       }
+      setOcrProgressForToken(token, { active: false });
     } catch (error) {
       if (!isActiveToken(token)) return;
       setOcrStatusForToken(token, `OCR: ${error.message}`);
+      setOcrProgressForToken(token, { active: false });
       logClientError("Local OCR failed", { error: error.message });
     }
     return;
@@ -1729,6 +1765,7 @@ async function autoRunOcrForCurrentFile(token) {
 
   const reason = getVeryfiBlockReason();
   setOcrStatusForToken(token, reason ? `OCR: ${reason}` : "OCR: unavailable.");
+  setOcrProgressForToken(token, { active: false });
 }
 
 function applyOcrToBulkItem(item, suggestions) {

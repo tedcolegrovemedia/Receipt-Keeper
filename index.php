@@ -84,6 +84,9 @@ require_once __DIR__ . '/guard.php';
             </div>
             <div class="preview-hint hidden" id="previewHint">Tap/click the image to zoom (2x, 3x).</div>
             <div class="ocr-status" id="ocrStatus">OCR: —</div>
+            <div class="ocr-progress" id="ocrProgress" hidden>
+              <div class="ocr-progress-fill" id="ocrProgressFill"></div>
+            </div>
           </div>
         </div>
 
