@@ -232,6 +232,14 @@
           </table>
         </div>
       </section>
+
+      <footer class="site-footer">
+        <div class="site-footer__line">Ted Colegrove Media LLC 2026</div>
+        <div class="site-footer__line">
+          Use at your own risk. The author makes no guarantees regarding functionality or security and is not
+          responsible for vulnerabilities, exploits, or breaches.
+        </div>
+      </footer>
     </main>
 
     <div class="modal" id="imageModal" aria-hidden="true">
