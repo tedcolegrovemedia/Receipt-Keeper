@@ -496,6 +496,7 @@ function updateOcrRemaining() {
   if (!isVeryfiConfigured()) {
     elements.ocrRemaining.textContent = "—";
     elements.ocrRemaining.title = "";
+    updateOcrRemainingVisibility();
     return;
   }
   if (typeof storage.veryfiRemaining === "number") {
@@ -505,10 +506,12 @@ function updateOcrRemaining() {
     } else {
       elements.ocrRemaining.title = "";
     }
+    updateOcrRemainingVisibility();
     return;
   }
   elements.ocrRemaining.textContent = "—";
   elements.ocrRemaining.title = "";
+  updateOcrRemainingVisibility();
 }
 
 function loadOcrOverride() {
@@ -538,31 +541,38 @@ function updateOcrStatusLabel() {
   if (!elements.ocrStatus) return;
   if (!storage.ocrDefaultEnabled) {
     elements.ocrStatus.textContent = "OCR: off";
+    updateOcrRemainingVisibility();
     return;
   }
   const override = storage.ocrOverride || "auto";
   if (storage.mode !== "server") {
     elements.ocrStatus.textContent =
       override === "local" ? "OCR: local (manual)" : "OCR: local";
+    updateOcrRemainingVisibility();
     return;
   }
   if (override === "veryfi") {
     elements.ocrStatus.textContent = shouldRunVeryfi() ? "OCR: Veryfi (manual)" : "OCR: Veryfi unavailable";
+    updateOcrRemainingVisibility();
     return;
   }
   if (override === "local") {
     elements.ocrStatus.textContent = "OCR: local (manual)";
+    updateOcrRemainingVisibility();
     return;
   }
   if (override === "auto") {
     elements.ocrStatus.textContent = shouldRunVeryfi() ? "OCR: Veryfi" : "OCR: local";
+    updateOcrRemainingVisibility();
     return;
   }
   if (shouldRunVeryfi()) {
     elements.ocrStatus.textContent = "OCR: Veryfi";
+    updateOcrRemainingVisibility();
     return;
   }
   elements.ocrStatus.textContent = shouldRunLocalOcr() ? "OCR: local" : "OCR: off";
+  updateOcrRemainingVisibility();
 }
 
 function updateOcrToggleButton() {
@@ -600,6 +610,15 @@ function setOcrProgressState({ active, value, indeterminate } = {}) {
 function setOcrProgressForToken(token, options = {}) {
   if (!isActiveToken(token)) return;
   setOcrProgressState(options);
+}
+
+function updateOcrRemainingVisibility() {
+  if (!elements.ocrRemaining) return;
+  const container = elements.ocrRemaining.closest(".stat");
+  if (!container) return;
+  const override = storage.ocrOverride || "auto";
+  const show = storage.ocrDefaultEnabled && isVeryfiConfigured() && override !== "local";
+  container.style.display = show ? "" : "none";
 }
 
 function normalizeVendorKeyValue(value) {
