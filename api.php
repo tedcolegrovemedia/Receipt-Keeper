@@ -321,6 +321,7 @@ try {
         $timestamp = (int) round(microtime(true) * 1000);
         $payload = [
             'document_type' => 'receipt',
+            'parse_address' => true,
         ];
         $signature = veryfi_signature($payload, $timestamp);
 
@@ -339,6 +340,7 @@ try {
         curl_setopt($ch, CURLOPT_POSTFIELDS, [
             'file' => $curlFile,
             'document_type' => 'receipt',
+            'parse_address' => 'true',
         ]);
 
         $response = curl_exec($ch);
@@ -369,6 +371,22 @@ try {
         $totalRaw = veryfi_extract_field($data, ['total', 'total_amount', 'amount']);
         $total = is_numeric($totalRaw) ? (float) $totalRaw : null;
         $text = veryfi_extract_field($data, ['ocr_text', 'text'], '');
+        $location = '';
+        if (!empty($data['parsed_address']) && is_array($data['parsed_address'])) {
+            $parsed = $data['parsed_address'];
+            $city = isset($parsed['city']) ? trim((string) $parsed['city']) : '';
+            $state = isset($parsed['state']) ? trim((string) $parsed['state']) : '';
+            if ($city !== '' && $state !== '') {
+                $location = $city . ', ' . $state;
+            } elseif ($city !== '') {
+                $location = $city;
+            } elseif ($state !== '') {
+                $location = $state;
+            }
+        }
+        if ($location === '') {
+            $location = veryfi_extract_field($data, ['vendor.address', 'vendor_address', 'store_address', 'address']);
+        }
 
         $usage = increment_veryfi_usage();
         respond([
@@ -377,6 +395,7 @@ try {
             'suggestions' => [
                 'date' => $date ?: null,
                 'vendor' => $vendor ?: null,
+                'location' => $location ?: null,
                 'total' => $total,
             ],
             'veryfiLimit' => $usage['limit'],

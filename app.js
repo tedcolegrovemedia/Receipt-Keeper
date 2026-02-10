@@ -766,11 +766,37 @@ function parseVendorFromText(text) {
   return null;
 }
 
+function parseLocationFromText(text) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line.length > 2);
+  const zipPattern = /([A-Za-z][A-Za-z .'-]+)[, ]+([A-Z]{2})\s+\d{5}(?:-\d{4})?/;
+  const commaPattern = /([A-Za-z][A-Za-z .'-]+),\s*([A-Z]{2})\b/;
+
+  for (const line of lines) {
+    let match = line.match(zipPattern);
+    if (match) {
+      return `${match[1].trim()}, ${match[2].trim()}`;
+    }
+  }
+
+  for (const line of lines) {
+    const match = line.match(commaPattern);
+    if (match) {
+      return `${match[1].trim()}, ${match[2].trim()}`;
+    }
+  }
+
+  return null;
+}
+
 function buildOcrSuggestions(text) {
   const date = parseDateFromText(text);
   const total = parseTotalFromText(text);
   const vendor = parseVendorFromText(text);
-  const suggestions = { date, total, vendor };
+  const location = parseLocationFromText(text);
+  const suggestions = { date, total, vendor, location };
   const hasAny = Object.values(suggestions).some((value) => value !== null && value !== undefined);
   return hasAny ? suggestions : null;
 }
@@ -793,6 +819,7 @@ function applySuggestions() {
 
   maybeSet(elements.receiptDate, suggestions.date, "date");
   maybeSet(elements.receiptVendor, suggestions.vendor, "vendor");
+  maybeSet(elements.receiptLocation, suggestions.location, "location");
   if (suggestions.total !== null && suggestions.total !== undefined) {
     maybeSet(elements.receiptTotalInput, suggestions.total.toFixed(2), "total");
   }
@@ -842,6 +869,7 @@ async function runLocalOcr() {
       const summary = [];
       if (state.ocrSuggestions.date) summary.push(`Date: ${state.ocrSuggestions.date}`);
       if (state.ocrSuggestions.vendor) summary.push(`Vendor: ${state.ocrSuggestions.vendor}`);
+      if (state.ocrSuggestions.location) summary.push(`Location: ${state.ocrSuggestions.location}`);
       if (state.ocrSuggestions.total !== null && state.ocrSuggestions.total !== undefined) {
         summary.push(`Total: ${formatCurrency(state.ocrSuggestions.total)}`);
       }
@@ -889,6 +917,7 @@ async function runVeryfiOcr() {
       const summary = [];
       if (state.ocrSuggestions.date) summary.push(`Date: ${state.ocrSuggestions.date}`);
       if (state.ocrSuggestions.vendor) summary.push(`Vendor: ${state.ocrSuggestions.vendor}`);
+      if (state.ocrSuggestions.location) summary.push(`Location: ${state.ocrSuggestions.location}`);
       if (state.ocrSuggestions.total !== null && state.ocrSuggestions.total !== undefined) {
         summary.push(`Total: ${formatCurrency(state.ocrSuggestions.total)}`);
       }
