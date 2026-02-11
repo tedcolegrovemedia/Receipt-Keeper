@@ -26,9 +26,19 @@ function asset_path(string $path): string
     $path = ltrim($path, '/');
     $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
     $base = base_path();
+
+    $documentRoot = realpath((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''));
+    $publicRoot = defined('PUBLIC_DIR') ? realpath(PUBLIC_DIR) : false;
+    $runningFromPublicDocRoot =
+        is_string($documentRoot)
+        && $documentRoot !== ''
+        && is_string($publicRoot)
+        && $publicRoot !== ''
+        && rtrim($documentRoot, DIRECTORY_SEPARATOR) === rtrim($publicRoot, DIRECTORY_SEPARATOR);
+
     $hasPublicInBase = preg_match('#(?:^|/)public(?:/|$)#', $base) === 1;
     $hasPublicInScript = preg_match('#(?:^|/)public(?:/|$)#', $script) === 1;
-    if (!$hasPublicInBase && !$hasPublicInScript) {
+    if (!$runningFromPublicDocRoot && !$hasPublicInBase && !$hasPublicInScript) {
         $path = 'public/' . $path;
     }
     return url_path($path);
