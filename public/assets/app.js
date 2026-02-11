@@ -108,6 +108,7 @@ const state = {
   pdfObjectUrls: [],
   vendorMemory: [],
   vendorCategoryMemory: {},
+  saveConfirmTimer: null,
 };
 
 function createZoomState() {
@@ -149,6 +150,7 @@ const bulkState = {
 const ocrHighlightTimers = new WeakMap();
 
 const elements = {
+  capturePanel: document.getElementById("capturePanel"),
   receiptImage: document.getElementById("receiptImage"),
   previewImage: document.getElementById("previewImage"),
   previewPdf: document.getElementById("previewPdf"),
@@ -201,6 +203,9 @@ const elements = {
   modalStatus: document.getElementById("modalStatus"),
   modalSave: document.getElementById("modalSave"),
   modalDelete: document.getElementById("modalDelete"),
+  saveConfirmModal: document.getElementById("saveConfirmModal"),
+  saveConfirmText: document.getElementById("saveConfirmText"),
+  saveConfirmClose: document.getElementById("saveConfirmClose"),
   bulkReceiptImages: document.getElementById("bulkReceiptImages"),
   bulkDrop: document.getElementById("bulkDrop"),
   bulkList: document.getElementById("bulkList"),
@@ -2152,6 +2157,37 @@ function closeReceiptModal() {
   }
 }
 
+function hideSaveConfirmation() {
+  if (!elements.saveConfirmModal) return;
+  elements.saveConfirmModal.classList.remove("active");
+  elements.saveConfirmModal.setAttribute("aria-hidden", "true");
+  if (state.saveConfirmTimer) {
+    clearTimeout(state.saveConfirmTimer);
+    state.saveConfirmTimer = null;
+  }
+}
+
+function showSaveConfirmation(message) {
+  if (!elements.saveConfirmModal) return;
+  if (elements.saveConfirmText) {
+    elements.saveConfirmText.textContent = message || "Receipt saved successfully.";
+  }
+  if (state.saveConfirmTimer) {
+    clearTimeout(state.saveConfirmTimer);
+  }
+  elements.saveConfirmModal.classList.add("active");
+  elements.saveConfirmModal.setAttribute("aria-hidden", "false");
+  state.saveConfirmTimer = window.setTimeout(() => {
+    hideSaveConfirmation();
+  }, 3000);
+}
+
+function scrollToCapturePanel() {
+  const target = elements.capturePanel || elements.receiptForm || elements.singleDrop;
+  if (!target || typeof target.scrollIntoView !== "function") return;
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function openReceiptModal(receipt) {
   if (!elements.imageModal || !elements.modalImage) return;
   closeReceiptModal();
@@ -2602,6 +2638,8 @@ async function init() {
       await rememberVendorFromOcr(state.ocrText, receipt.vendor, state.ocrSuggestions?.vendor || "");
       resetForm();
       await refreshList();
+      scrollToCapturePanel();
+      showSaveConfirmation("Receipt saved.");
     } catch (error) {
       setPreviewMessage(`Save failed: ${error.message}`);
       logClientError("Save receipt failed", { error: error.message });
@@ -2731,9 +2769,24 @@ async function init() {
       await refreshList();
     });
   }
+  if (elements.saveConfirmClose) {
+    elements.saveConfirmClose.addEventListener("click", hideSaveConfirmation);
+  }
+  if (elements.saveConfirmModal) {
+    elements.saveConfirmModal.addEventListener("click", (event) => {
+      if (event.target === elements.saveConfirmModal) {
+        hideSaveConfirmation();
+      }
+    });
+  }
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && elements.imageModal?.classList.contains("active")) {
+    if (event.key !== "Escape") return;
+    if (elements.imageModal?.classList.contains("active")) {
       closeReceiptModal();
+      return;
+    }
+    if (elements.saveConfirmModal?.classList.contains("active")) {
+      hideSaveConfirmation();
     }
   });
 

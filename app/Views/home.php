@@ -56,7 +56,7 @@
         </div>
       </header>
 
-      <section class="panel">
+      <section class="panel" id="capturePanel">
         <div class="panel-header">
           <h2>New Receipt</h2>
           <p>Use your phone camera or upload an existing image.</p>
@@ -283,6 +283,13 @@
           <button class="btn primary" id="modalSave" type="button">Save changes</button>
           <button class="btn ghost" id="modalDelete" type="button">Delete</button>
         </div>
+      </div>
+    </div>
+
+    <div class="confirm-modal" id="saveConfirmModal" aria-hidden="true">
+      <div class="confirm-modal__content" role="alertdialog" aria-modal="true" aria-labelledby="saveConfirmText">
+        <p class="confirm-modal__text" id="saveConfirmText">Receipt saved successfully.</p>
+        <button class="btn ghost" id="saveConfirmClose" type="button">Close</button>
       </div>
     </div>
 
