@@ -59,35 +59,111 @@ class AuthController
 
         $error = '';
         $success = '';
-        $recoveryEmail = '';
+        $codeInput = '';
         $configuredEmail = get_forgot_password_email();
+        $state = $this->loadForgotPasswordState();
+        $now = time();
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $recoveryEmail = strtolower(trim((string) ($_POST['recovery_email'] ?? '')));
-            $new = (string) ($_POST['new_password'] ?? '');
-            $confirm = (string) ($_POST['confirm_password'] ?? '');
+            $action = (string) ($_POST['action'] ?? '');
 
             if (!verify_csrf_token($_POST['csrf_token'] ?? null)) {
                 $error = 'Session expired. Please refresh and try again.';
             } elseif ($configuredEmail === '') {
                 $error = 'Recovery email is not configured. Use your existing password to sign in and set one.';
-            } elseif ($recoveryEmail === '' || $recoveryEmail !== strtolower($configuredEmail)) {
-                $error = 'Recovery email did not match.';
-            } elseif (strlen($new) < MIN_PASSWORD_LENGTH) {
-                $error = 'New password is too short. Use at least ' . MIN_PASSWORD_LENGTH . ' characters.';
-            } elseif ($new !== $confirm) {
-                $error = 'New passwords do not match.';
-            } elseif (!set_password_hash(password_hash($new, PASSWORD_DEFAULT))) {
-                $error = 'Could not reset password. Check folder permissions.';
             } else {
-                $success = 'Password reset. You can sign in now.';
+                if ($action === 'send_code') {
+                    $lastSent = isset($state['sent_at']) ? (int) $state['sent_at'] : 0;
+                    $wait = FORGOT_CODE_RESEND_SECONDS - ($now - $lastSent);
+                    if ($lastSent > 0 && $wait > 0) {
+                        $error = 'Please wait ' . $wait . ' second(s) before sending a new code.';
+                    } else {
+                        $code = str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+                        if (!$this->sendRecoveryCode($configuredEmail, $code)) {
+                            $error = 'Could not send reset code email. Check server mail settings.';
+                        } else {
+                            $state = [
+                                'code_hash' => password_hash($code, PASSWORD_DEFAULT),
+                                'expires_at' => $now + FORGOT_CODE_TTL_SECONDS,
+                                'sent_at' => $now,
+                                'attempts' => 0,
+                                'verified' => false,
+                            ];
+                            $this->saveForgotPasswordState($state);
+                            $success = 'Code sent to ' . $this->maskEmail($configuredEmail) . '.';
+                        }
+                    }
+                } elseif ($action === 'verify_code') {
+                    $codeInput = trim((string) ($_POST['code'] ?? ''));
+                    if ($codeInput === '' || !preg_match('/^\d{4}$/', $codeInput)) {
+                        $error = 'Enter the 4-digit code.';
+                    } elseif (empty($state['code_hash'])) {
+                        $error = 'Send a code first.';
+                    } elseif ((int) ($state['expires_at'] ?? 0) <= $now) {
+                        $this->clearForgotPasswordState();
+                        $state = [];
+                        $error = 'Code expired. Send a new code.';
+                    } else {
+                        $attempts = (int) ($state['attempts'] ?? 0);
+                        if ($attempts >= FORGOT_CODE_MAX_ATTEMPTS) {
+                            $this->clearForgotPasswordState();
+                            $state = [];
+                            $error = 'Too many incorrect attempts. Send a new code.';
+                        } elseif (!password_verify($codeInput, (string) ($state['code_hash'] ?? ''))) {
+                            $state['attempts'] = $attempts + 1;
+                            $this->saveForgotPasswordState($state);
+                            $remaining = max(0, FORGOT_CODE_MAX_ATTEMPTS - (int) $state['attempts']);
+                            $error = $remaining > 0
+                                ? "Incorrect code. {$remaining} attempt(s) remaining."
+                                : 'Incorrect code.';
+                        } else {
+                            $state['verified'] = true;
+                            $this->saveForgotPasswordState($state);
+                            $success = 'Code verified. Set a new password.';
+                        }
+                    }
+                } elseif ($action === 'reset_password') {
+                    $new = (string) ($_POST['new_password'] ?? '');
+                    $confirm = (string) ($_POST['confirm_password'] ?? '');
+                    if (empty($state['code_hash'])) {
+                        $error = 'Send and verify a code first.';
+                    } elseif ((int) ($state['expires_at'] ?? 0) <= $now) {
+                        $this->clearForgotPasswordState();
+                        $state = [];
+                        $error = 'Code expired. Send a new code.';
+                    } elseif (empty($state['verified'])) {
+                        $error = 'Verify the code before changing the password.';
+                    } elseif (strlen($new) < MIN_PASSWORD_LENGTH) {
+                        $error = 'New password is too short. Use at least ' . MIN_PASSWORD_LENGTH . ' characters.';
+                    } elseif ($new !== $confirm) {
+                        $error = 'New passwords do not match.';
+                    } elseif (!set_password_hash(password_hash($new, PASSWORD_DEFAULT))) {
+                        $error = 'Could not reset password. Check folder permissions.';
+                    } else {
+                        $this->clearForgotPasswordState();
+                        $state = [];
+                        $success = 'Password reset. You can sign in now.';
+                    }
+                } else {
+                    $error = 'Invalid request.';
+                }
             }
         }
+
+        $state = $this->loadForgotPasswordState();
+        $expiresAt = isset($state['expires_at']) ? (int) $state['expires_at'] : 0;
+        $codeSent = !empty($state['code_hash']) && $expiresAt > time();
+        $codeVerified = $codeSent && !empty($state['verified']);
+        $expiresIn = $codeSent ? max(0, $expiresAt - time()) : 0;
 
         render('forgot-password', [
             'error' => $error,
             'success' => $success,
-            'recoveryEmail' => $recoveryEmail,
+            'maskedEmail' => $this->maskEmail($configuredEmail),
+            'codeInput' => $codeInput,
+            'codeSent' => $codeSent,
+            'codeVerified' => $codeVerified,
+            'expiresIn' => $expiresIn,
         ]);
     }
 
@@ -150,5 +226,57 @@ class AuthController
         }
 
         render('change-password', ['error' => $error, 'success' => $success]);
+    }
+
+    private function loadForgotPasswordState(): array
+    {
+        $state = $_SESSION['forgot_password'] ?? [];
+        return is_array($state) ? $state : [];
+    }
+
+    private function saveForgotPasswordState(array $state): void
+    {
+        $_SESSION['forgot_password'] = $state;
+    }
+
+    private function clearForgotPasswordState(): void
+    {
+        unset($_SESSION['forgot_password']);
+    }
+
+    private function maskEmail(string $email): string
+    {
+        if (!str_contains($email, '@')) {
+            return $email;
+        }
+        [$local, $domain] = explode('@', $email, 2);
+        $local = trim($local);
+        if ($local === '') {
+            return '***@' . $domain;
+        }
+        if (strlen($local) === 1) {
+            return $local . '***@' . $domain;
+        }
+        return substr($local, 0, 1) . str_repeat('*', max(2, strlen($local) - 2)) . substr($local, -1) . '@' . $domain;
+    }
+
+    private function sendRecoveryCode(string $email, string $code): bool
+    {
+        if (!function_exists('mail')) {
+            return false;
+        }
+        $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
+        $host = preg_replace('/:\d+$/', '', $host);
+        $host = preg_replace('/^www\./i', '', $host);
+        if (!is_string($host) || trim($host) === '') {
+            $host = 'localhost.localdomain';
+        }
+        $subject = 'Receipt Keeper password reset code';
+        $body = "Your Receipt Keeper password reset code is: {$code}\n\nThis code expires in 10 minutes.\nIf you did not request this reset, ignore this email.\n";
+        $headers = [
+            'From: Receipt Keeper <noreply@' . $host . '>',
+            'Content-Type: text/plain; charset=UTF-8',
+        ];
+        return @mail($email, $subject, $body, implode("\r\n", $headers));
     }
 }

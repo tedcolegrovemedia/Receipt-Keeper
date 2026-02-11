@@ -101,7 +101,8 @@
     <form class="card" method="post" action="">
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
       <h1>Reset password</h1>
-      <p>Enter the recovery email and set a new password.</p>
+      <p>Send a 4-digit code to your configured recovery email, verify it, then set a new password.</p>
+      <p>Recovery email on file: <strong><?php echo htmlspecialchars($maskedEmail ?? 'not configured', ENT_QUOTES, 'UTF-8'); ?></strong></p>
 
       <?php if (!empty($error)): ?>
       <div class="error"><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></div>
@@ -111,25 +112,33 @@
       <div class="success"><?php echo htmlspecialchars($success, ENT_QUOTES, 'UTF-8'); ?></div>
       <?php endif; ?>
 
+      <button class="btn" type="submit" name="action" value="send_code">Email 4-digit code</button>
+
       <label>
-        Recovery email
+        4-digit code
         <input
-          type="email"
-          name="recovery_email"
-          autocomplete="email"
-          value="<?php echo htmlspecialchars($recoveryEmail ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-          required
+          type="text"
+          name="code"
+          inputmode="numeric"
+          pattern="\d{4}"
+          maxlength="4"
+          value="<?php echo htmlspecialchars($codeInput ?? '', ENT_QUOTES, 'UTF-8'); ?>"
         />
       </label>
+      <?php if (!empty($codeSent)): ?>
+      <p>Code expires in <?php echo (int) ceil(((int) ($expiresIn ?? 0)) / 60); ?> minute(s).</p>
+      <?php endif; ?>
+      <button class="btn" type="submit" name="action" value="verify_code">Verify code</button>
+
       <label>
         New password
-        <input type="password" name="new_password" autocomplete="new-password" required />
+        <input type="password" name="new_password" autocomplete="new-password" <?php echo !empty($codeVerified) ? 'required' : 'disabled'; ?> />
       </label>
       <label>
         Confirm new password
-        <input type="password" name="confirm_password" autocomplete="new-password" required />
+        <input type="password" name="confirm_password" autocomplete="new-password" <?php echo !empty($codeVerified) ? 'required' : 'disabled'; ?> />
       </label>
-      <button class="btn" type="submit">Reset password</button>
+      <button class="btn" type="submit" name="action" value="reset_password" <?php echo !empty($codeVerified) ? '' : 'disabled'; ?>>Set new password</button>
       <p><a href="<?php echo htmlspecialchars(url_path('login'), ENT_QUOTES, 'UTF-8'); ?>">Back to sign in</a></p>
     </form>
   </body>

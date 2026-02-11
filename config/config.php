@@ -15,6 +15,9 @@ const VENDOR_MEMORY_FILE = DATA_DIR . '/vendor-memory.json';
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOGIN_WINDOW_SECONDS = 900;
 const MIN_PASSWORD_LENGTH = 12;
+const FORGOT_CODE_TTL_SECONDS = 600;
+const FORGOT_CODE_RESEND_SECONDS = 45;
+const FORGOT_CODE_MAX_ATTEMPTS = 5;
 
 // Optional local secrets file (do not commit).
 $localConfig = LOCAL_CONFIG_FILE;
