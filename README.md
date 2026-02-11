@@ -1,139 +1,387 @@
 # Receipt Keeper
 
-A lightweight, self-hosted receipt logger with OCR, bulk upload, and CSV export.
+Self-hosted receipt logger for tax/business expense tracking.
 
-## Features
-- Capture receipts from camera or photo library
-- Single upload supports PDFs (bulk is images only)
-- Auto OCR via Veryfi (local fallback available)
-- Bulk upload with auto-filled OCR fields
-- Business purpose required on every receipt
-- Category required on every receipt
-- Year filtering, pagination, CSV export
-- Simple password-protected access
-- SQLite/MySQL/JSON storage (auto-fallback available)
+It supports:
+- camera/photo library uploads from phone
+- desktop drag/drop uploads
+- single PDF receipt upload
+- automatic OCR (Veryfi + local fallback)
+- required fields for category and business purpose
+- edit/delete + bulk delete
+- year filters, pagination, and CSV export
+- diagnostics/admin tools (mail, OCR quota, import/export, base path)
+
+---
+
+## Core Features
+
+- Authentication:
+  - Shared login (`admin` username + hashed password).
+  - Forgot password with 4-digit code.
+  - Recovery can use email or SMS (Twilio).
+  - Rate-limited login attempts.
+
+- Receipt capture:
+  - Single upload: images + PDFs.
+  - Bulk upload: images only.
+  - Uploaded images are converted to black/white before saving (OCR-friendly).
+  - Desktop drag-and-drop supported.
+  - Image preview with zoom levels and panning.
+
+- OCR:
+  - Default path: Veryfi (when configured and quota remains).
+  - Fallback: local OCR (Tesseract.js in browser).
+  - PDF path: local PDF text extraction via PDF.js first, then Veryfi fallback.
+  - OCR provider can be toggled in UI (`Use Veryfi` / `Use Local`).
+  - OCR-filled inputs are highlighted briefly.
+  - Category can be inferred from OCR text + vendor heuristics.
+  - Vendor memory learns from corrected/confirmed entries.
+
+- Receipt management:
+  - Required fields: `Date`, `Vendor`, `Category`, `Business Purpose`, `Total`.
+  - Optional field: `Location`.
+  - Table view: Date, Vendor, Category, Total.
+  - Edit in modal.
+  - Single delete + page-level bulk delete.
+  - Year filtering (`All` or specific year) and pagination.
+  - CSV export for selected year or all years.
+  - CSV includes total sum row and USD formatting.
+
+- Admin tools:
+  - Runtime/installation diagnostics.
+  - Storage checks (JSON/SQLite/MySQL).
+  - OCR remaining counter editor (Veryfi quota).
+  - Mail transport settings (`mail()` or SMTP).
+  - Test email sender.
+  - Update recovery email.
+  - Full backup export ZIP.
+  - Backup import ZIP.
+  - Base path override for subfolder deployments.
+
+- UI:
+  - Light/dark mode toggle with persistence in localStorage.
+  - Category reference table (accordion).
+  - Footer disclaimer/copyright.
+
+---
+
+## Tech Stack
+
+- Backend: plain PHP (MVC-style structure)
+- Frontend: vanilla JS + CSS (no framework)
+- OCR:
+  - Veryfi API (server-side call via cURL)
+  - Local OCR via Tesseract.js (browser)
+  - PDF text extraction via PDF.js (browser)
+- Storage:
+  - JSON (always available)
+  - SQLite (PDO SQLite)
+  - MySQL (PDO MySQL)
+
+---
+
+## Project Layout
+
+```text
+app/
+  Controllers/
+  Views/
+config/
+  bootstrap.php
+  config.php
+  config.local.php      # local overrides/secrets (gitignored)
+data/                   # runtime data (gitignored except .htaccess)
+  uploads/
+  receipts.json
+  receipts.sqlite
+  password.json
+  vendor-memory.json
+  veryfi-usage.json
+  api-error.log
+  client-error.log
+  mail-debug.log
+public/
+  index.php
+  .htaccess
+  assets/
+    app.js
+    ocr-parser.js
+    styles.css
+    theme.js
+  vendor/pdfjs/
+    pdf.min.mjs
+    pdf.worker.mjs
+.htaccess               # root rewrite helper for shared hosting
+index.php               # root fallback -> public/index.php
+```
+
+---
 
 ## Requirements
-- PHP 8.0+ (tested on 8.x)
-- `pdo_sqlite` enabled (optional; falls back to JSON if unavailable)
-- `pdo_mysql` enabled (optional; needed for MySQL storage)
-- Web server (Apache / Nginx) or PHP built-in server for local testing
 
-## Setup
+- PHP `7.4+` (8.x recommended)
+- Web server:
+  - Apache (tested path)
+  - PHP built-in server for local dev
+- Writable `data/` and `data/uploads/` directories
 
-### 1) Configure storage and permissions
-Ensure the `data/` folder is writable by the web server:
+Optional PHP extensions by feature:
+- `pdo_sqlite` for SQLite storage
+- `pdo_mysql` for MySQL storage
+- `curl` for Veryfi OCR and Twilio SMS
+- `zip` (`ZipArchive`) for full backup export/import
+- `stream_socket_client` for SMTP mail transport
 
-```
-data/
-  uploads/
-  password.json
-  receipts.sqlite
-```
+Third-party services (optional):
+- Veryfi OCR
+- Twilio SMS (forgot-password delivery)
 
-### 2) Set admin password
-Create `data/password.json` with a bcrypt hash:
+---
+
+## Quick Start (Local)
+
+1. Go to project root.
+2. Ensure writable directories exist:
 
 ```bash
-php -r 'echo json_encode(["hash" => password_hash("YOUR_PASSWORD", PASSWORD_DEFAULT)], JSON_PRETTY_PRINT);' > data/password.json
+mkdir -p data/uploads data/sessions
+chmod -R 775 data
 ```
 
-Default username is `admin`.
+3. Start server (either option):
 
-### 3) (Optional) Configure Veryfi OCR
-Create `config/config.local.php` (this file is git-ignored) with your Veryfi credentials:
+```bash
+# Option A: serve project root (uses root index.php fallback)
+php -S 127.0.0.1:8000
+
+# Option B: serve public directly
+php -S 127.0.0.1:8000 -t public
+```
+
+4. Open:
+
+```text
+http://127.0.0.1:8000
+```
+
+5. First run redirects to `/install` if `data/password.json` is missing.
+
+---
+
+## Installer Flow
+
+Installer appears when no password file exists.
+
+It sets:
+- admin password hash
+- recovery contact (email and/or phone; at least one required)
+- storage mode (`json`, `sqlite`, `mysql`)
+- optional Veryfi credentials
+
+If MySQL is selected, installer validates DB connection.
+
+---
+
+## Configuration
+
+### 1) `config/config.local.php` (recommended for overrides)
+
+This file is gitignored and should hold local secrets/settings.
+
+Common defines:
 
 ```php
 <?php
 declare(strict_types=1);
 
-define('VERYFI_CLIENT_ID', 'YOUR_CLIENT_ID');
-define('VERYFI_USERNAME', 'YOUR_USERNAME');
-define('VERYFI_API_KEY', 'YOUR_API_KEY');
-define('VERYFI_CLIENT_SECRET', 'YOUR_CLIENT_SECRET');
-```
+define('OCR_DEFAULT_ENABLED', true);
+define('APP_BASE_PATH', '/writeoff'); // optional subfolder override
 
-If not configured, the app falls back to **local OCR** (Tesseract.js) in the browser.
-
-To disable OCR entirely, add this to `config/config.local.php`:
-
-```php
-define('OCR_DEFAULT_ENABLED', false);
-```
-
-### 4) (Optional) Local PDF text extraction
-PDF text extraction requires PDF.js. This repo includes the PDF.js files under `public/vendor/pdfjs/` by default. If you remove them, re-add these:
-
-```
-public/vendor/pdfjs/pdf.min.mjs
-public/vendor/pdfjs/pdf.worker.mjs
-```
-
-Legacy `.mjs` and `.js` builds also work if you prefer them:
-
-```
-public/vendor/pdfjs/pdf.worker.min.mjs
-```
-
-```
-public/vendor/pdfjs/pdf.min.js
-public/vendor/pdfjs/pdf.worker.min.js
-```
-
-If those files are missing, PDF uploads will fall back to Veryfi (when available) or skip OCR with a notice.
-
-### 5) (Optional) Configure MySQL storage
-If you prefer MySQL, add these to `config/config.local.php` (or use the installer):
-
-```php
-define('STORAGE_MODE', 'mysql');
-define('MYSQL_HOST', 'localhost');
+// Storage
+define('STORAGE_MODE', 'auto'); // auto|json|sqlite|mysql
+define('MYSQL_HOST', '');
 define('MYSQL_PORT', 3306);
-define('MYSQL_DATABASE', 'receipt_keeper');
-define('MYSQL_USERNAME', 'db_user');
-define('MYSQL_PASSWORD', 'db_pass');
+define('MYSQL_DATABASE', '');
+define('MYSQL_USERNAME', '');
+define('MYSQL_PASSWORD', '');
+
+// Veryfi OCR
+define('VERYFI_CLIENT_ID', '');
+define('VERYFI_CLIENT_SECRET', '');
+define('VERYFI_USERNAME', '');
+define('VERYFI_API_KEY', '');
+
+// Twilio (optional SMS reset)
+define('TWILIO_ACCOUNT_SID', '');
+define('TWILIO_AUTH_TOKEN', '');
+define('TWILIO_FROM_NUMBER', '');
+
+// Mail settings (editable in Admin)
+define('MAIL_TRANSPORT', 'mail'); // mail|smtp
+define('MAIL_FROM_EMAIL', '');
+define('MAIL_FROM_NAME', 'Receipt Keeper');
+define('SMTP_HOST', '');
+define('SMTP_PORT', 587);
+define('SMTP_ENCRYPTION', 'tls'); // none|tls|ssl
+define('SMTP_USERNAME', '');
+define('SMTP_PASSWORD', '');
+define('SMTP_TIMEOUT', 20);
 ```
 
-To force JSON or SQLite:
+### 2) Runtime files in `data/`
 
-```php
-define('STORAGE_MODE', 'json');   // or 'sqlite'
-```
+- `password.json` stores:
+  - bcrypt password hash
+  - recovery email
+  - recovery phone
+- `receipts.json` or `receipts.sqlite` depending on active storage
+- `uploads/` stores processed receipt images/PDFs
 
-## Run Locally
+---
 
-```bash
-php -S 127.0.0.1:8000 -t public
-```
+## Storage Behavior
 
-Open: `http://127.0.0.1:8000`
+`STORAGE_MODE=auto` resolution order:
+1. MySQL (if driver + config + connection valid)
+2. SQLite (if available/valid)
+3. JSON fallback
 
-## First-time Setup
-If `data/password.json` is missing, the app will redirect you to `/install` to set the admin password and (optionally) Veryfi credentials.
+Explicit modes:
+- `json`: always JSON
+- `sqlite`: SQLite else JSON fallback
+- `mysql`: MySQL else JSON fallback
 
-The installer also lets you pick storage:
-- JSON (default, always available)
-- SQLite (if `pdo_sqlite` is enabled)
-- MySQL (if `pdo_mysql` is enabled and credentials are provided)
+The active driver is shown in Admin diagnostics.
 
-## Project Structure
-- `public/` web root (front controller, assets, PDF.js)
-- `app/Controllers/` request handlers
-- `app/Views/` templates
-- `config/` app config + local secrets
-- `data/` receipts, uploads, logs
+---
 
-## Production Notes
-- Point your web root to `public/` (recommended).
-- If you cannot change the web root (e.g., shared hosting), keep the root `.htaccess` so `/public` is used automatically.
-- Ensure `data/` is writable and not publicly accessible.
-- Keep `config/config.local.php` and `data/password.json` out of version control.
-- If SQLite is not available on your host, the app will use `data/receipts.json` instead.
+## OCR Behavior
 
-## OCR Notes
-- OCR runs automatically when enabled (no UI toggle).
-- **Local OCR** runs in the browser and does not send data to third parties.
-- **Veryfi OCR** sends images to Veryfi. Make sure your API plan matches your usage.
+### Single image upload
+- Uses Veryfi when configured and quota remains.
+- Falls back to local OCR if Veryfi unavailable/exhausted.
 
-## License
-Private use by default. Add a license if you intend to distribute.
+### Single PDF upload
+- Tries local text extraction via PDF.js first.
+- If PDF.js unavailable or extraction fails, falls back to Veryfi (if available).
+
+### Bulk upload
+- Images only (PDF blocked in bulk).
+- OCR attempts to prefill each queue item.
+
+### OCR provider status
+- UI displays current OCR mode/status.
+- "OCR Remaining" is shown only when Veryfi path is active.
+
+### Local OCR dependencies
+- Tesseract.js loaded from CDN:
+  - `https://unpkg.com/tesseract.js@5.0.5/dist/tesseract.min.js`
+- PDF.js files must exist in:
+  - `public/vendor/pdfjs/pdf.min.mjs`
+  - `public/vendor/pdfjs/pdf.worker.mjs`
+
+---
+
+## Apache/Subfolder Deployment
+
+Recommended:
+- Point web root directly to `public/`.
+
+If you cannot change web root (shared hosting):
+- keep root `index.php` and root `.htaccess`
+- ensure rewrite rules route traffic into `public/`
+
+Important:
+- update `RewriteBase` values in:
+  - `/.htaccess`
+  - `/public/.htaccess`
+- match your subfolder (example: `/writeoff/`)
+
+If deploying without HTTPS yet:
+- `/public/.htaccess` currently forces HTTPS.
+- remove/comment that redirect rule if needed temporarily.
+
+Also ensure:
+- `data/` is writable by PHP
+- `data/.htaccess` remains in place (deny direct access)
+
+---
+
+## Admin Panel Reference
+
+`/admin` includes:
+- install/runtime checks
+- storage diagnostics and connectivity probes
+- OCR remaining counter editor
+- mail transport config (`mail()` / SMTP)
+- email test sender
+- recovery email update
+- full export ZIP generator
+- import ZIP restore
+- base path updater
+
+Full export ZIP contains:
+- `receipts/receipts.json`
+- `receipts/receipts.csv`
+- `uploads/*`
+- `meta/vendor-memory.json` (if present)
+- `meta/veryfi-usage.json` (if present)
+- `manifest.json`
+
+---
+
+## Logging & Troubleshooting
+
+Logs written under `data/`:
+- `api-error.log` (server/API exceptions)
+- `client-error.log` (browser-side error reports)
+- `mail-debug.log` (mail send attempts/results)
+
+Common issues:
+- Login loops after sign-in:
+  - ensure `data/` is writable (session files are stored in `data/sessions`)
+  - verify base path/subfolder config
+- "Session expired":
+  - clear cookies and reload
+  - verify consistent host/path (especially behind proxy/subfolder)
+- OCR unavailable:
+  - check Veryfi credentials in `config.local.php` or installer/admin
+  - check Veryfi quota remaining
+- PDF OCR unavailable:
+  - verify PDF.js files exist in `public/vendor/pdfjs/`
+- Email reset not arriving:
+  - run Admin "Send Test Email"
+  - review `data/mail-debug.log`
+  - if SMTP selected, confirm host/port/encryption/auth
+
+---
+
+## Security Notes
+
+- Keep these out of git:
+  - `config/config.local.php`
+  - `data/*` runtime files
+- Keep `data/.htaccess` in place.
+- Use HTTPS in production.
+- Rotate shared password periodically.
+- Use SMTP with authenticated credentials where possible.
+
+---
+
+## Customization Notes
+
+- Expense categories and explanations are defined in:
+  - `public/assets/app.js` (`EXPENSE_CATEGORIES`)
+- OCR parsing heuristics live in:
+  - `public/assets/ocr-parser.js`
+- Theme behavior lives in:
+  - `public/assets/theme.js`
+
+---
+
+## Disclaimer
+
+© 2026 Ted Colegrove Media LLC
+
+Use at your own risk. The author makes no guarantees regarding functionality or security and is not responsible for vulnerabilities, exploits, or breaches.
