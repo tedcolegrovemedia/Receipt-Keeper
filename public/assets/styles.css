@@ -1014,6 +1014,14 @@ body.dark .admin-flash-error {
   background: var(--preview-bg);
 }
 
+.modal-content iframe {
+  width: 100%;
+  min-height: 420px;
+  max-height: 70vh;
+  border: 1px solid var(--line);
+  background: var(--preview-bg);
+}
+
 .modal-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -1077,6 +1085,11 @@ body.dark .admin-flash-error {
 
   .modal-content img {
     max-height: 35vh;
+  }
+
+  .modal-content iframe {
+    min-height: 320px;
+    max-height: 60vh;
   }
 
   .modal-form {

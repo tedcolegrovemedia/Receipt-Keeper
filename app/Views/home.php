@@ -250,6 +250,7 @@
           <button class="btn ghost" id="modalClose" type="button">Close</button>
         </div>
         <img id="modalImage" alt="Receipt image" />
+        <iframe id="modalPdf" title="Receipt PDF preview" style="display: none;"></iframe>
         <div class="modal-form">
           <label>
             Date

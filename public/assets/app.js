@@ -177,6 +177,7 @@ const elements = {
   modalBackdrop: document.getElementById("modalBackdrop"),
   modalClose: document.getElementById("modalClose"),
   modalImage: document.getElementById("modalImage"),
+  modalPdf: document.getElementById("modalPdf"),
   modalDate: document.getElementById("modalDate"),
   modalVendor: document.getElementById("modalVendor"),
   modalLocation: document.getElementById("modalLocation"),
@@ -311,6 +312,14 @@ function isPdfFile(file) {
   if (file.type === "application/pdf") return true;
   const ext = file.name ? file.name.split(".").pop().toLowerCase() : "";
   return ext === "pdf";
+}
+
+function isPdfReceipt(receipt) {
+  if (!receipt) return false;
+  const imageFile = String(receipt.imageFile || "").toLowerCase();
+  if (imageFile.endsWith(".pdf")) return true;
+  if (receipt.image && isPdfFile(receipt.image)) return true;
+  return false;
 }
 
 function pickFirstReceiptFile(files) {
@@ -2107,6 +2116,10 @@ function closeReceiptModal() {
     elements.modalImage.src = "";
     elements.modalImage.style.display = "block";
   }
+  if (elements.modalPdf) {
+    elements.modalPdf.src = "";
+    elements.modalPdf.style.display = "none";
+  }
   if (elements.modalMeta) {
     elements.modalMeta.textContent = "";
   }
@@ -2137,11 +2150,22 @@ function openReceiptModal(receipt) {
     url = URL.createObjectURL(receipt.image);
     state.modalUrl = url;
   }
-  if (url) {
+  const showPdf = isPdfReceipt(receipt);
+  if (url && showPdf && elements.modalPdf) {
+    elements.modalPdf.src = url;
+    elements.modalPdf.style.display = "block";
+    elements.modalImage.style.display = "none";
+  } else if (url) {
     elements.modalImage.src = url;
     elements.modalImage.style.display = "block";
+    if (elements.modalPdf) {
+      elements.modalPdf.style.display = "none";
+    }
   } else {
     elements.modalImage.style.display = "none";
+    if (elements.modalPdf) {
+      elements.modalPdf.style.display = "none";
+    }
   }
   const metaParts = [];
   if (receipt.vendor) metaParts.push(receipt.vendor);
