@@ -134,6 +134,7 @@ Optional PHP extensions by feature:
 - `curl` for Veryfi OCR
 - `zip` (`ZipArchive`) for ZIP export/import (preferred)
 - `phar` (`PharData`) for TAR/TAR.GZ export/import fallback
+  - if both are unavailable, export/import still works via JSON bundle fallback
 
 Third-party services (optional):
 - Veryfi OCR
@@ -306,6 +307,7 @@ Also ensure:
 Archive format behavior:
 - Uses ZIP when `ZipArchive` is available.
 - Falls back to `tar.gz` when ZIP is unavailable but `PharData` is available.
+- Falls back to `.json` export/import bundle when neither extension is available.
 
 Full export archive contains:
 - `receipts/receipts.json`

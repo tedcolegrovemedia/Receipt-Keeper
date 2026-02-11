@@ -142,7 +142,7 @@
             <p>Restore receipts and receipt files from a previous export archive.</p>
             <label>
               Export archive file
-              <input type="file" name="import_bundle" accept=".zip,.tar,.tgz,.tar.gz,application/zip,application/x-tar,application/gzip" required />
+              <input type="file" name="import_bundle" accept=".zip,.tar,.tgz,.tar.gz,.json,application/zip,application/x-tar,application/gzip,application/json" required />
             </label>
             <label class="admin-checkbox">
               <input type="checkbox" name="import_replace" value="1" checked />

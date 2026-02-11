@@ -198,6 +198,19 @@ class AdminController
 
     private function importBundle(string $archivePath, bool $replaceExisting, string $originalName = ''): array
     {
+        $jsonImport = $this->tryImportJsonBundle($archivePath, $replaceExisting, $originalName);
+        if (!empty($jsonImport['recognized'])) {
+            return [
+                'ok' => !empty($jsonImport['ok']),
+                'error' => (string) ($jsonImport['error'] ?? ''),
+                'restoredReceipts' => (int) ($jsonImport['restoredReceipts'] ?? 0),
+                'restoredImages' => (int) ($jsonImport['restoredImages'] ?? 0),
+                'missingImages' => (int) ($jsonImport['missingImages'] ?? 0),
+                'skippedReceipts' => (int) ($jsonImport['skippedReceipts'] ?? 0),
+                'warnings' => (array) ($jsonImport['warnings'] ?? []),
+            ];
+        }
+
         $archive = $this->openArchiveForImport($archivePath, $originalName);
         if (!$archive['ok']) {
             return ['ok' => false, 'error' => (string) $archive['error']];
@@ -439,22 +452,137 @@ class AdminController
         }
     }
 
-    private function downloadExportBundle(string $requestedYear = 'all'): void
+    private function tryImportJsonBundle(string $path, bool $replaceExisting, string $originalName = ''): array
     {
-        if (!class_exists('ZipArchive') && !class_exists('PharData')) {
-            render('admin', [
-                'checks' => $this->buildChecks(),
-                'summary' => ['pass' => 0, 'warning' => 0, 'fail' => 0],
-                'runtime' => [],
-                'error' => 'No archive extension available (ZipArchive or PharData).',
-                'success' => '',
-                'ocrRemainingValue' => '',
-                'ocrLimit' => (int) VERYFI_MONTHLY_LIMIT,
-                'appBasePathValue' => defined('APP_BASE_PATH') ? (string) APP_BASE_PATH : '',
-                'exportYears' => $this->extractReceiptYears(fetch_all_receipts()),
-            ]);
+        $name = strtolower(trim($originalName));
+        if ($name === '') {
+            $name = strtolower(basename($path));
+        }
+        if (preg_match('/\.json$/', $name) !== 1) {
+            return ['recognized' => false];
         }
 
+        $raw = file_get_contents($path);
+        if (!is_string($raw) || trim($raw) === '') {
+            return ['recognized' => true, 'ok' => false, 'error' => 'JSON export bundle is empty.'];
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return ['recognized' => true, 'ok' => false, 'error' => 'Invalid JSON export bundle file.'];
+        }
+
+        $format = (string) ($decoded['format'] ?? '');
+        if ($format !== 'receipt-keeper-export-json') {
+            return ['recognized' => false];
+        }
+
+        $receipts = $decoded['receipts'] ?? null;
+        if (!is_array($receipts)) {
+            return ['recognized' => true, 'ok' => false, 'error' => 'JSON export bundle is missing receipts data.'];
+        }
+
+        if ($replaceExisting) {
+            if (!$this->deleteAllUploadedFiles()) {
+                return ['recognized' => true, 'ok' => false, 'error' => 'Could not clear existing uploaded files.'];
+            }
+            if (!delete_all_receipts()) {
+                return ['recognized' => true, 'ok' => false, 'error' => 'Could not clear existing receipts before import.'];
+            }
+        }
+
+        $uploads = [];
+        if (isset($decoded['uploads']) && is_array($decoded['uploads'])) {
+            $uploads = $decoded['uploads'];
+        }
+
+        $restoredReceipts = 0;
+        $restoredImages = 0;
+        $missingImages = 0;
+        $skippedReceipts = 0;
+
+        foreach ($receipts as $item) {
+            if (!is_array($item)) {
+                $skippedReceipts += 1;
+                continue;
+            }
+
+            $normalized = normalize_receipt_record($item);
+            if ($normalized['id'] === '') {
+                $skippedReceipts += 1;
+                continue;
+            }
+            if ($normalized['createdAt'] === '') {
+                $normalized['createdAt'] = gmdate('c');
+            }
+
+            $imageFile = $this->sanitizeImportImageFile((string) ($normalized['imageFile'] ?? ''), $normalized['id']);
+            $normalized['imageFile'] = $imageFile;
+
+            if ($imageFile !== '') {
+                $entry = $uploads[$imageFile] ?? null;
+                $binary = null;
+                if (is_string($entry)) {
+                    $binary = base64_decode($entry, true);
+                } elseif (is_array($entry)) {
+                    $encoding = strtolower(trim((string) ($entry['encoding'] ?? 'base64')));
+                    $data = (string) ($entry['data'] ?? '');
+                    if ($encoding === 'base64' && $data !== '') {
+                        $binary = base64_decode($data, true);
+                    }
+                }
+
+                if (is_string($binary)) {
+                    if (file_put_contents(UPLOADS_DIR . '/' . $imageFile, $binary, LOCK_EX) !== false) {
+                        $restoredImages += 1;
+                    } else {
+                        $normalized['imageFile'] = '';
+                        $missingImages += 1;
+                    }
+                } else {
+                    $existingPath = UPLOADS_DIR . '/' . $imageFile;
+                    if (!is_file($existingPath)) {
+                        $normalized['imageFile'] = '';
+                        $missingImages += 1;
+                    }
+                }
+            }
+
+            if (!upsert_receipt($normalized)) {
+                $skippedReceipts += 1;
+                continue;
+            }
+
+            $restoredReceipts += 1;
+        }
+
+        $warnings = [];
+        if (isset($decoded['vendorMemory']) && is_array($decoded['vendorMemory'])) {
+            $vendorPayload = json_encode($decoded['vendorMemory'], JSON_PRETTY_PRINT);
+            if (is_string($vendorPayload) && file_put_contents(VENDOR_MEMORY_FILE, $vendorPayload, LOCK_EX) === false) {
+                $warnings[] = 'Could not restore vendor memory';
+            }
+        }
+        if (isset($decoded['veryfiUsage']) && is_array($decoded['veryfiUsage'])) {
+            $usagePayload = json_encode($decoded['veryfiUsage'], JSON_PRETTY_PRINT);
+            if (is_string($usagePayload) && file_put_contents(VERYFI_USAGE_FILE, $usagePayload, LOCK_EX) === false) {
+                $warnings[] = 'Could not restore Veryfi usage data';
+            }
+        }
+
+        return [
+            'recognized' => true,
+            'ok' => true,
+            'restoredReceipts' => $restoredReceipts,
+            'restoredImages' => $restoredImages,
+            'missingImages' => $missingImages,
+            'skippedReceipts' => $skippedReceipts,
+            'warnings' => $warnings,
+        ];
+    }
+
+    private function downloadExportBundle(string $requestedYear = 'all'): void
+    {
         $allReceipts = fetch_all_receipts();
         $scope = $this->normalizeExportYear($requestedYear);
         $receipts = $scope === 'all'
@@ -544,54 +672,125 @@ class AdminController
             exit;
         }
 
-        $tmpFile = tempnam(sys_get_temp_dir(), 'rkexp_');
-        if ($tmpFile === false) {
-            throw new RuntimeException('Could not allocate temporary file for export.');
-        }
-        $tarPath = $tmpFile . '.tar';
-        if (!@rename($tmpFile, $tarPath)) {
-            $tarPath = $tmpFile;
+        if (class_exists('PharData')) {
+            $tmpFile = tempnam(sys_get_temp_dir(), 'rkexp_');
+            if ($tmpFile === false) {
+                throw new RuntimeException('Could not allocate temporary file for export.');
+            }
+            $tarPath = $tmpFile . '.tar';
+            if (!@rename($tmpFile, $tarPath)) {
+                $tarPath = $tmpFile;
+            }
+
+            try {
+                $tar = new PharData($tarPath);
+                $tar->addFromString('manifest.json', json_encode($manifest, JSON_PRETTY_PRINT));
+                $tar->addFromString('receipts/receipts.json', json_encode($receipts, JSON_PRETTY_PRINT));
+                $tar->addFromString('receipts/receipts.csv', $this->buildReceiptsCsv($receipts));
+                if (is_file(VENDOR_MEMORY_FILE)) {
+                    $content = file_get_contents(VENDOR_MEMORY_FILE);
+                    if ($content !== false) {
+                        $tar->addFromString('meta/vendor-memory.json', $content);
+                    }
+                }
+                if (is_file(VERYFI_USAGE_FILE)) {
+                    $content = file_get_contents(VERYFI_USAGE_FILE);
+                    if ($content !== false) {
+                        $tar->addFromString('meta/veryfi-usage.json', $content);
+                    }
+                }
+                foreach (array_keys($exportFiles) as $file) {
+                    $path = UPLOADS_DIR . '/' . $file;
+                    if (is_file($path)) {
+                        $tar->addFile($path, 'uploads/' . $file);
+                    }
+                }
+                $tarGz = $tar->compress(Phar::GZ);
+                $gzPath = $tarGz->getPath();
+                unset($tar, $tarGz);
+                @unlink($tarPath);
+            } catch (Throwable $error) {
+                @unlink($tarPath);
+                throw new RuntimeException('Could not create export archive: ' . $error->getMessage());
+            }
+
+            $downloadName = 'receipt-keeper-export-' . $suffix . '-' . gmdate('Ymd-His') . '.tar.gz';
+            header('Content-Type: application/gzip');
+            header('Content-Disposition: attachment; filename="' . $downloadName . '"');
+            header('Content-Length: ' . (string) filesize($gzPath));
+            header('Cache-Control: no-store, max-age=0');
+            readfile($gzPath);
+            @unlink($gzPath);
+            exit;
         }
 
-        try {
-            $tar = new PharData($tarPath);
-            $tar->addFromString('manifest.json', json_encode($manifest, JSON_PRETTY_PRINT));
-            $tar->addFromString('receipts/receipts.json', json_encode($receipts, JSON_PRETTY_PRINT));
-            $tar->addFromString('receipts/receipts.csv', $this->buildReceiptsCsv($receipts));
-            if (is_file(VENDOR_MEMORY_FILE)) {
-                $content = file_get_contents(VENDOR_MEMORY_FILE);
-                if ($content !== false) {
-                    $tar->addFromString('meta/vendor-memory.json', $content);
+        $this->downloadJsonBundle($manifest, $receipts, array_keys($exportFiles), $suffix);
+    }
+
+    private function downloadJsonBundle(array $manifest, array $receipts, array $files, string $suffix): void
+    {
+        $bundle = [
+            'format' => 'receipt-keeper-export-json',
+            'version' => 1,
+            'manifest' => $manifest,
+            'receipts' => $receipts,
+            'uploads' => [],
+        ];
+
+        if (is_file(VENDOR_MEMORY_FILE)) {
+            $raw = file_get_contents(VENDOR_MEMORY_FILE);
+            if (is_string($raw) && $raw !== '') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $bundle['vendorMemory'] = $decoded;
                 }
             }
-            if (is_file(VERYFI_USAGE_FILE)) {
-                $content = file_get_contents(VERYFI_USAGE_FILE);
-                if ($content !== false) {
-                    $tar->addFromString('meta/veryfi-usage.json', $content);
+        }
+        if (is_file(VERYFI_USAGE_FILE)) {
+            $raw = file_get_contents(VERYFI_USAGE_FILE);
+            if (is_string($raw) && $raw !== '') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $bundle['veryfiUsage'] = $decoded;
                 }
             }
-            foreach (array_keys($exportFiles) as $file) {
-                $path = UPLOADS_DIR . '/' . $file;
-                if (is_file($path)) {
-                    $tar->addFile($path, 'uploads/' . $file);
-                }
-            }
-            $tarGz = $tar->compress(Phar::GZ);
-            $gzPath = $tarGz->getPath();
-            unset($tar, $tarGz);
-            @unlink($tarPath);
-        } catch (Throwable $error) {
-            @unlink($tarPath);
-            throw new RuntimeException('Could not create export archive: ' . $error->getMessage());
         }
 
-        $downloadName = 'receipt-keeper-export-' . $suffix . '-' . gmdate('Ymd-His') . '.tar.gz';
-        header('Content-Type: application/gzip');
+        foreach ($files as $file) {
+            $safe = basename((string) $file);
+            if ($safe === '' || $safe === '.' || $safe === '..') {
+                continue;
+            }
+            $path = UPLOADS_DIR . '/' . $safe;
+            if (!is_file($path)) {
+                continue;
+            }
+            $binary = file_get_contents($path);
+            if ($binary === false) {
+                continue;
+            }
+            $mime = function_exists('mime_content_type') ? (string) mime_content_type($path) : '';
+            if ($mime === '') {
+                $mime = 'application/octet-stream';
+            }
+            $bundle['uploads'][$safe] = [
+                'encoding' => 'base64',
+                'mime' => $mime,
+                'data' => base64_encode($binary),
+            ];
+        }
+
+        $payload = json_encode($bundle, JSON_PRETTY_PRINT);
+        if (!is_string($payload)) {
+            throw new RuntimeException('Could not encode JSON export bundle.');
+        }
+
+        $downloadName = 'receipt-keeper-export-' . $suffix . '-' . gmdate('Ymd-His') . '.json';
+        header('Content-Type: application/json');
         header('Content-Disposition: attachment; filename="' . $downloadName . '"');
-        header('Content-Length: ' . (string) filesize($gzPath));
+        header('Content-Length: ' . (string) strlen($payload));
         header('Cache-Control: no-store, max-age=0');
-        readfile($gzPath);
-        @unlink($gzPath);
+        echo $payload;
         exit;
     }
 
@@ -833,7 +1032,7 @@ class AdminController
 
         $zipAvailable = class_exists('ZipArchive');
         $tarAvailable = class_exists('PharData');
-        $archiveAvailable = $zipAvailable || $tarAvailable;
+        $archiveAvailable = true;
         $archiveDetailParts = [];
         if ($zipAvailable) {
             $archiveDetailParts[] = 'ZipArchive available';
@@ -842,7 +1041,7 @@ class AdminController
             $archiveDetailParts[] = 'PharData (tar/tar.gz) available';
         }
         if ($archiveDetailParts === []) {
-            $archiveDetailParts[] = 'ZipArchive and PharData missing';
+            $archiveDetailParts[] = 'ZipArchive and PharData missing; JSON bundle fallback available';
         }
         $checks[] = $this->makeCheck(
             'Archive export/import support',
@@ -989,7 +1188,7 @@ class AdminController
             $parts[] = 'tar/tar.gz';
         }
         if ($parts === []) {
-            return 'Unavailable';
+            return 'JSON fallback only';
         }
         return strtoupper(implode(', ', $parts));
     }
