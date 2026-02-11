@@ -53,7 +53,6 @@ It supports:
   - Storage checks (JSON/SQLite/MySQL).
   - Login username editor.
   - OCR remaining counter editor (Veryfi quota).
-  - Reset PIN editor for forgot-password flow.
   - Full backup export ZIP.
   - Backup import ZIP.
   - Base path override for subfolder deployments.
@@ -307,7 +306,6 @@ Also ensure:
 - storage diagnostics and connectivity probes
 - login username editor
 - OCR remaining counter editor
-- reset PIN editor
 - full export ZIP generator
 - import ZIP restore
 - base path updater
@@ -342,7 +340,7 @@ Common issues:
 - PDF OCR unavailable:
   - verify PDF.js files exist in `public/vendor/pdfjs/`
 - Forgot-password reset not working:
-  - verify a reset PIN is configured in Admin
+  - verify a reset PIN is configured (set during install)
   - ensure PIN is exactly 4 digits
 
 ---

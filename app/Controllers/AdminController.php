@@ -74,8 +74,6 @@ class AdminController
                 return $this->handleUpdateOcrRemaining();
             case 'update_app_username':
                 return $this->handleUpdateAppUsername();
-            case 'update_reset_pin':
-                return $this->handleUpdateResetPin();
             case 'export_bundle':
                 $this->downloadExportBundle();
                 return ['', 'Failed to start export download.'];
@@ -120,25 +118,6 @@ class AdminController
 
         $label = $normalized === '' ? 'auto-detect' : $normalized;
         return ["Base path saved as {$label}. Refresh the page to apply.", ''];
-    }
-
-    private function handleUpdateResetPin(): array
-    {
-        $pin = trim((string) ($_POST['reset_pin'] ?? ''));
-        $confirm = trim((string) ($_POST['reset_pin_confirm'] ?? ''));
-
-        if (!preg_match('/^\d{4}$/', $pin)) {
-            return ['', 'Reset PIN must be exactly 4 digits.'];
-        }
-        if ($pin !== $confirm) {
-            return ['', 'Reset PIN values do not match.'];
-        }
-
-        if (!set_password_reset_pin_hash(password_hash($pin, PASSWORD_DEFAULT))) {
-            return ['', 'Could not save reset PIN. Check data folder permissions.'];
-        }
-
-        return ['Reset PIN updated.', ''];
     }
 
     private function handleUpdateAppUsername(): array
@@ -579,7 +558,6 @@ class AdminController
 
         $storageReady = ensure_storage_ready();
         $passwordSet = get_password_hash() !== '';
-        $resetPinSet = get_password_reset_pin_hash() !== '';
         $veryfiConfigured = $this->veryfiConfigured();
 
         $checks[] = $this->makeCheck(
@@ -617,12 +595,6 @@ class AdminController
             true,
             $passwordSet,
             $passwordSet ? 'Password hash present.' : 'Password is not configured. Run installer.'
-        );
-        $checks[] = $this->makeCheck(
-            'Reset PIN configured',
-            true,
-            $resetPinSet,
-            $resetPinSet ? 'Forgot-password reset PIN is configured.' : 'Forgot-password reset PIN is not configured.'
         );
         $checks[] = $this->makeCheck(
             'Storage mode resolved',

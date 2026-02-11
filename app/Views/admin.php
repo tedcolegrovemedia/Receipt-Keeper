@@ -118,38 +118,6 @@
 
           <form class="admin-tool" method="post" action="">
             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
-            <input type="hidden" name="admin_action" value="update_reset_pin" />
-            <h3>Reset PIN</h3>
-            <p>Set the 4-digit PIN used on the forgot-password page.</p>
-            <label>
-              New 4-digit PIN
-              <input
-                type="password"
-                name="reset_pin"
-                inputmode="numeric"
-                pattern="\d{4}"
-                maxlength="4"
-                autocomplete="off"
-                required
-              />
-            </label>
-            <label>
-              Confirm 4-digit PIN
-              <input
-                type="password"
-                name="reset_pin_confirm"
-                inputmode="numeric"
-                pattern="\d{4}"
-                maxlength="4"
-                autocomplete="off"
-                required
-              />
-            </label>
-            <button class="btn primary" type="submit">Save Reset PIN</button>
-          </form>
-
-          <form class="admin-tool" method="post" action="">
-            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
             <input type="hidden" name="admin_action" value="export_bundle" />
             <h3>Full Export</h3>
             <p>Download a full backup zip with receipts JSON, receipts CSV, and uploaded receipt files.</p>
