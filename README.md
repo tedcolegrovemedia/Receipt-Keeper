@@ -102,7 +102,6 @@ data/                   # runtime data (gitignored except .htaccess)
   veryfi-usage.json
   api-error.log
   client-error.log
-  mail-debug.log
 public/
   index.php
   .htaccess
@@ -133,7 +132,6 @@ Optional PHP extensions by feature:
 - `pdo_mysql` for MySQL storage
 - `curl` for Veryfi OCR
 - `zip` (`ZipArchive`) for full backup export/import
-- `stream_socket_client` for SMTP mail transport
 
 Third-party services (optional):
 - Veryfi OCR
@@ -212,17 +210,6 @@ define('VERYFI_CLIENT_ID', '');
 define('VERYFI_CLIENT_SECRET', '');
 define('VERYFI_USERNAME', '');
 define('VERYFI_API_KEY', '');
-
-// Mail settings (editable in Admin)
-define('MAIL_TRANSPORT', 'mail'); // mail|smtp
-define('MAIL_FROM_EMAIL', '');
-define('MAIL_FROM_NAME', 'Receipt Keeper');
-define('SMTP_HOST', '');
-define('SMTP_PORT', 587);
-define('SMTP_ENCRYPTION', 'tls'); // none|tls|ssl
-define('SMTP_USERNAME', '');
-define('SMTP_PASSWORD', '');
-define('SMTP_TIMEOUT', 20);
 ```
 
 ### 2) Runtime files in `data/`
@@ -329,7 +316,6 @@ Full export ZIP contains:
 Logs written under `data/`:
 - `api-error.log` (server/API exceptions)
 - `client-error.log` (browser-side error reports)
-- `mail-debug.log` (mail send attempts/results)
 
 Common issues:
 - Login loops after sign-in:
