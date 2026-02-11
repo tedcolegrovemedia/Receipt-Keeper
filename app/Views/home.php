@@ -20,6 +20,9 @@
           <button class="btn ghost small" id="themeToggle" type="button" aria-pressed="false">
             Dark mode
           </button>
+          <a class="btn ghost" href="<?php echo htmlspecialchars(url_path('admin'), ENT_QUOTES, 'UTF-8'); ?>">
+            Admin
+          </a>
           <a class="btn ghost" href="<?php echo htmlspecialchars(url_path('change-password'), ENT_QUOTES, 'UTF-8'); ?>">
             Change password
           </a>

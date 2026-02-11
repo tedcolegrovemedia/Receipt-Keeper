@@ -773,6 +773,78 @@ input[type="search"] {
   border-bottom: none;
 }
 
+.diag-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--ink);
+}
+
+.diag-pass {
+  border-color: #5ca872;
+  color: #245f36;
+  background: #eaf7ef;
+}
+
+.diag-warning {
+  border-color: #cc9a4a;
+  color: #8a5b12;
+  background: #fff3de;
+}
+
+.diag-fail {
+  border-color: #c96560;
+  color: #8d2722;
+  background: #fdecec;
+}
+
+body.dark .diag-pass {
+  border-color: #4f9b67;
+  color: #bfe7c8;
+  background: #203428;
+}
+
+body.dark .diag-warning {
+  border-color: #b88a41;
+  color: #f0d3a4;
+  background: #352a19;
+}
+
+body.dark .diag-fail {
+  border-color: #b05a55;
+  color: #f0c0bd;
+  background: #3c2321;
+}
+
+.runtime-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.runtime-item {
+  border: 1px solid var(--line);
+  background: var(--panel-muted);
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.runtime-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.runtime-value {
+  font-weight: 600;
+  word-break: break-word;
+}
+
 .empty-state {
   text-align: center;
   color: var(--muted);

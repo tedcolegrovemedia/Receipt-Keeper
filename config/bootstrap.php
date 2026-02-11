@@ -12,6 +12,7 @@ header('Referrer-Policy: no-referrer');
 header('Cache-Control: no-store, max-age=0');
 
 require_once __DIR__ . '/../app/Controllers/HomeController.php';
+require_once __DIR__ . '/../app/Controllers/AdminController.php';
 require_once __DIR__ . '/../app/Controllers/AuthController.php';
 require_once __DIR__ . '/../app/Controllers/InstallController.php';
 require_once __DIR__ . '/../app/Controllers/ApiController.php';

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Diagnostics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_path('assets/styles.css'), ENT_QUOTES, 'UTF-8'); ?>" />
+  </head>
+  <body data-base="<?php echo htmlspecialchars(base_path(), ENT_QUOTES, 'UTF-8'); ?>">
+    <main class="app">
+      <nav class="top-nav">
+        <div class="nav-brand"></div>
+        <div class="nav-actions">
+          <a class="btn ghost" href="<?php echo htmlspecialchars(url_path(''), ENT_QUOTES, 'UTF-8'); ?>">Receipts</a>
+          <a class="btn ghost" href="<?php echo htmlspecialchars(url_path('change-password'), ENT_QUOTES, 'UTF-8'); ?>">
+            Change password
+          </a>
+          <a class="btn ghost" href="<?php echo htmlspecialchars(url_path('logout'), ENT_QUOTES, 'UTF-8'); ?>">
+            Sign out
+          </a>
+        </div>
+      </nav>
+
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Admin</p>
+          <h1>Installation Diagnostics</h1>
+          <p class="lede">Quick checks for storage, OCR, and recovery setup.</p>
+        </div>
+        <div class="hero-card">
+          <div class="stat">
+            <span class="stat-label">Passed</span>
+            <span class="stat-value"><?php echo (int) ($summary['pass'] ?? 0); ?></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Warnings</span>
+            <span class="stat-value"><?php echo (int) ($summary['warning'] ?? 0); ?></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Failures</span>
+            <span class="stat-value"><?php echo (int) ($summary['fail'] ?? 0); ?></span>
+          </div>
+          <a class="btn ghost" href="<?php echo htmlspecialchars(url_path('admin'), ENT_QUOTES, 'UTF-8'); ?>">Run checks again</a>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Checks</h2>
+            <p>Required items should all pass before production use.</p>
+          </div>
+        </div>
+        <div class="receipts-table diagnostics-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Check</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach (($checks ?? []) as $check): ?>
+              <tr class="diag-row-<?php echo htmlspecialchars((string) ($check['status'] ?? 'pass'), ENT_QUOTES, 'UTF-8'); ?>">
+                <td><?php echo htmlspecialchars((string) ($check['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?php echo !empty($check['required']) ? 'Required' : 'Optional'; ?></td>
+                <td>
+                  <?php
+                    $status = (string) ($check['status'] ?? 'pass');
+                    $label = 'Pass';
+                    if ($status === 'warning') {
+                        $label = 'Warning';
+                    } elseif ($status === 'fail') {
+                        $label = 'Fail';
+                    }
+                  ?>
+                  <span class="diag-badge diag-<?php echo htmlspecialchars($status, ENT_QUOTES, 'UTF-8'); ?>">
+                    <?php echo htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?>
+                  </span>
+                </td>
+                <td><?php echo htmlspecialchars((string) ($check['detail'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+              </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Runtime</h2>
+            <p>Current environment details.</p>
+          </div>
+        </div>
+        <div class="runtime-grid">
+          <?php foreach (($runtime ?? []) as $key => $value): ?>
+          <div class="runtime-item">
+            <div class="runtime-label"><?php echo htmlspecialchars((string) $key, ENT_QUOTES, 'UTF-8'); ?></div>
+            <div class="runtime-value"><?php echo htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8'); ?></div>
+          </div>
+          <?php endforeach; ?>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

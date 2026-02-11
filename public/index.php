@@ -22,6 +22,9 @@ switch ($path) {
     case '/':
         (new HomeController())->index();
         break;
+    case '/admin':
+        (new AdminController())->index();
+        break;
     case '/login':
         (new AuthController())->login();
         break;
