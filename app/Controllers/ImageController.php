@@ -6,6 +6,7 @@ class ImageController
     public function show(): void
     {
         ensure_authenticated();
+        header('X-Frame-Options: SAMEORIGIN');
 
         $id = trim($_GET['id'] ?? '');
         if ($id === '') {

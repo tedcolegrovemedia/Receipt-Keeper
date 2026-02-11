@@ -1491,5 +1491,5 @@ function delete_all_receipts(): bool
 
 function build_image_url(string $id): string
 {
-    return 'image?id=' . rawurlencode($id);
+    return url_path('image?id=' . rawurlencode($id));
 }

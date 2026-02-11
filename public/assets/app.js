@@ -10,6 +10,19 @@ const buildPath = (path) => {
   if (!base) return clean;
   return `${base}/${clean}`;
 };
+const resolveMediaUrl = (url) => {
+  const value = String(url || "").trim();
+  if (!value) return "";
+  if (
+    value.startsWith("/") ||
+    value.startsWith("blob:") ||
+    value.startsWith("data:") ||
+    /^[a-z][a-z0-9+.-]*:/i.test(value)
+  ) {
+    return value;
+  }
+  return buildPath(value);
+};
 const API_BASE = buildPath("api");
 const PDFJS_SOURCES = [
   {
@@ -2145,7 +2158,7 @@ function openReceiptModal(receipt) {
   state.modalReceipt = receipt;
   let url = "";
   if (receipt.imageUrl) {
-    url = receipt.imageUrl;
+    url = resolveMediaUrl(receipt.imageUrl);
   } else if (receipt.image) {
     url = URL.createObjectURL(receipt.image);
     state.modalUrl = url;
