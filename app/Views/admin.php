@@ -103,6 +103,23 @@
             <button class="btn primary" type="submit">Download Export Zip</button>
           </form>
 
+          <form class="admin-tool" method="post" action="">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
+            <input type="hidden" name="admin_action" value="test_email" />
+            <h3>Email Test</h3>
+            <p>Send a test email to verify server mail delivery.</p>
+            <label>
+              Destination email (blank uses recovery email)
+              <input
+                type="email"
+                name="test_email"
+                placeholder="name@example.com"
+                value="<?php echo htmlspecialchars((string) ($defaultTestEmail ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+              />
+            </label>
+            <button class="btn primary" type="submit">Send Test Email</button>
+          </form>
+
           <form class="admin-tool" method="post" action="" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
             <input type="hidden" name="admin_action" value="import_bundle" />

@@ -48,6 +48,7 @@ class AdminController
             'ocrRemainingValue' => $ocrRemaining === null ? '' : (string) $ocrRemaining,
             'ocrLimit' => $ocrLimit,
             'appBasePathValue' => defined('APP_BASE_PATH') ? (string) APP_BASE_PATH : '',
+            'defaultTestEmail' => get_forgot_password_email(),
         ]);
     }
 
@@ -65,6 +66,8 @@ class AdminController
         switch ($action) {
             case 'update_ocr_remaining':
                 return $this->handleUpdateOcrRemaining();
+            case 'test_email':
+                return $this->handleTestEmail();
             case 'export_bundle':
                 $this->downloadExportBundle();
                 return ['', 'Failed to start export download.'];
@@ -109,6 +112,31 @@ class AdminController
 
         $label = $normalized === '' ? 'auto-detect' : $normalized;
         return ["Base path saved as {$label}. Refresh the page to apply.", ''];
+    }
+
+    private function handleTestEmail(): array
+    {
+        $destination = strtolower(trim((string) ($_POST['test_email'] ?? '')));
+        if ($destination === '') {
+            $destination = get_forgot_password_email();
+        }
+
+        if ($destination === '') {
+            return ['', 'No destination email provided and no recovery email is configured.'];
+        }
+        if (!filter_var($destination, FILTER_VALIDATE_EMAIL)) {
+            return ['', 'Test email must be a valid email address.'];
+        }
+        if (!function_exists('mail')) {
+            return ['', 'PHP mail() is not available on this server.'];
+        }
+
+        $ok = $this->sendAdminTestEmail($destination);
+        if (!$ok) {
+            return ['', 'Mail send failed. Check sendmail/SMTP configuration on this server.'];
+        }
+
+        return ['Test email sent to ' . $destination . '.', ''];
     }
 
     private function handleImportBundle(): array
@@ -475,6 +503,25 @@ class AdminController
     private function formatUsd(float $value): string
     {
         return '$' . number_format($value, 2, '.', '');
+    }
+
+    private function sendAdminTestEmail(string $destination): bool
+    {
+        $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
+        $host = preg_replace('/:\d+$/', '', $host);
+        $host = preg_replace('/^www\./i', '', $host);
+        if (!is_string($host) || trim($host) === '') {
+            $host = 'localhost.localdomain';
+        }
+
+        $subject = 'Receipt Keeper email test';
+        $body = "This is a test email from Receipt Keeper admin.\n\nSent at: " . gmdate('c') . "\nHost: {$host}\n";
+        $headers = [
+            'From: Receipt Keeper <noreply@' . $host . '>',
+            'Content-Type: text/plain; charset=UTF-8',
+        ];
+
+        return @mail($destination, $subject, $body, implode("\r\n", $headers));
     }
 
     private function upsertLocalConfigDefine(string $name, string $value): bool
