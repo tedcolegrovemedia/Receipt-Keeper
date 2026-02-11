@@ -17,6 +17,9 @@
       <nav class="top-nav">
         <div class="nav-brand"></div>
         <div class="nav-actions">
+          <button class="btn ghost small" id="themeToggle" type="button" aria-pressed="false">
+            Dark mode
+          </button>
           <a class="btn ghost" href="<?php echo htmlspecialchars(url_path(''), ENT_QUOTES, 'UTF-8'); ?>">Receipts</a>
           <a class="btn ghost" href="<?php echo htmlspecialchars(url_path('change-password'), ENT_QUOTES, 'UTF-8'); ?>">
             Change password
@@ -111,5 +114,6 @@
         </div>
       </section>
     </main>
+    <script src="<?php echo htmlspecialchars(asset_path('assets/theme.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
   </body>
 </html>

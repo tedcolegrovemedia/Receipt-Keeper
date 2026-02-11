@@ -285,6 +285,7 @@
       </div>
     </div>
 
+    <script src="<?php echo htmlspecialchars(asset_path('assets/theme.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
     <script src="<?php echo htmlspecialchars(asset_path('assets/ocr-parser.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
     <script src="<?php echo htmlspecialchars(asset_path('assets/app.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
   </body>

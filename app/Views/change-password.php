@@ -24,6 +24,7 @@
         --accent-soft: #d8eee9;
         --warning: #b65d3a;
         --shadow: 0 18px 40px rgba(18, 16, 14, 0.1);
+        --input-bg: #fffdf9;
         --radius: 0px;
       }
 
@@ -51,6 +52,31 @@
           linear-gradient(300deg, rgba(182, 93, 58, 0.14), transparent 50%);
         pointer-events: none;
         z-index: 0;
+      }
+
+      body.dark {
+        color-scheme: dark;
+        --bg: #11100e;
+        --bg-accent: #1c1a16;
+        --ink: #f2eee8;
+        --muted: #b7aca3;
+        --panel: #1a1916;
+        --line: #2f2b26;
+        --accent: #5bc4b2;
+        --accent-strong: #3ea493;
+        --accent-soft: #1e332f;
+        --warning: #e19a74;
+        --shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+        --input-bg: #1f1d19;
+      }
+
+      body.dark {
+        background: radial-gradient(circle at top, #191815 0%, #13110f 55%, #0f0e0c 100%);
+      }
+
+      body.dark::before {
+        background: linear-gradient(120deg, rgba(91, 196, 178, 0.12), transparent 45%),
+          linear-gradient(300deg, rgba(225, 154, 116, 0.12), transparent 50%);
       }
 
       .card {
@@ -98,7 +124,8 @@
         padding: 10px 12px;
         font-size: 1rem;
         font-family: "Source Sans 3", sans-serif;
-        background: #fffdf9;
+        background: var(--input-bg);
+        color: var(--ink);
       }
 
       .btn {
@@ -182,9 +209,11 @@
       </label>
 
       <div class="actions">
+        <button class="btn ghost" id="themeToggle" type="button" aria-pressed="false">Dark mode</button>
         <button class="btn" type="submit">Update password</button>
         <a class="btn ghost" href="<?php echo htmlspecialchars(url_path(''), ENT_QUOTES, 'UTF-8'); ?>">Back to app</a>
       </div>
     </form>
+    <script src="<?php echo htmlspecialchars(asset_path('assets/theme.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
   </body>
 </html>

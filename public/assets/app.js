@@ -637,48 +637,6 @@ function updateOcrRemainingVisibility() {
   container.style.display = show ? "" : "none";
 }
 
-const THEME_KEY = "receipt_theme";
-
-function getPreferredTheme() {
-  try {
-    const saved = localStorage.getItem(THEME_KEY);
-    if (saved === "light" || saved === "dark") return saved;
-  } catch (error) {
-    // ignore storage errors
-  }
-  if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-    return "dark";
-  }
-  return "light";
-}
-
-function applyTheme(theme) {
-  const isDark = theme === "dark";
-  document.body.classList.toggle("dark", isDark);
-  if (!elements.themeToggle) return;
-  elements.themeToggle.textContent = isDark ? "Light mode" : "Dark mode";
-  elements.themeToggle.setAttribute("aria-pressed", isDark ? "true" : "false");
-}
-
-function setTheme(theme) {
-  applyTheme(theme);
-  try {
-    localStorage.setItem(THEME_KEY, theme);
-  } catch (error) {
-    // ignore storage errors
-  }
-}
-
-function initTheme() {
-  const theme = getPreferredTheme();
-  applyTheme(theme);
-  if (!elements.themeToggle) return;
-  elements.themeToggle.addEventListener("click", () => {
-    const isDark = document.body.classList.contains("dark");
-    setTheme(isDark ? "light" : "dark");
-  });
-}
-
 function normalizeVendorKeyValue(value) {
   return String(value || "")
     .toLowerCase()
@@ -2483,7 +2441,6 @@ async function exportCsv() {
 async function init() {
   elements.receiptDate.value = todayISO();
   clearPreview();
-  initTheme();
   await initStorage();
   await loadVendorMemory();
   if (storage.mode === "local" && !window.indexedDB) {

@@ -23,7 +23,15 @@ function url_path(string $path = ''): string
 
 function asset_path(string $path): string
 {
-  return url_path($path);
+    $path = ltrim($path, '/');
+    $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    $base = base_path();
+    $hasPublicInBase = preg_match('#(?:^|/)public(?:/|$)#', $base) === 1;
+    $hasPublicInScript = preg_match('#(?:^|/)public(?:/|$)#', $script) === 1;
+    if (!$hasPublicInBase && !$hasPublicInScript) {
+        $path = 'public/' . $path;
+    }
+    return url_path($path);
 }
 
 function needs_install(): bool
