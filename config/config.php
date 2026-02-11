@@ -101,13 +101,56 @@ const VERYFI_ENDPOINT = 'https://api.veryfi.com/api/v8/partner/documents';
 const VERYFI_MONTHLY_LIMIT = 100;
 const VERYFI_USAGE_FILE = DATA_DIR . '/veryfi-usage.json';
 
+function request_is_https(): bool
+{
+    $https = strtolower((string) ($_SERVER['HTTPS'] ?? ''));
+    if ($https !== '' && $https !== 'off' && $https !== '0') {
+        return true;
+    }
+
+    $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    if ($forwardedProto !== '' && strpos($forwardedProto, 'https') !== false) {
+        return true;
+    }
+
+    $forwardedSsl = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? ''));
+    if ($forwardedSsl === 'on' || $forwardedSsl === '1') {
+        return true;
+    }
+
+    $port = (int) ($_SERVER['SERVER_PORT'] ?? 0);
+    return $port === 443;
+}
+
+function ensure_session_storage_path(): ?string
+{
+    if (!is_dir(DATA_DIR) || !is_writable(DATA_DIR)) {
+        return null;
+    }
+
+    $path = DATA_DIR . '/sessions';
+    if (!is_dir($path)) {
+        @mkdir($path, 0700, true);
+    }
+    if (!is_dir($path) || !is_writable($path)) {
+        return null;
+    }
+
+    return $path;
+}
+
 function start_secure_session(): void
 {
     if (session_status() === PHP_SESSION_ACTIVE) {
         return;
     }
 
-    $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+    $sessionPath = ensure_session_storage_path();
+    if ($sessionPath !== null) {
+        session_save_path($sessionPath);
+    }
+
+    $secure = request_is_https();
     session_name(SESSION_NAME);
     session_set_cookie_params([
         'lifetime' => 0,
@@ -115,9 +158,12 @@ function start_secure_session(): void
         'domain' => '',
         'secure' => $secure,
         'httponly' => true,
-        'samesite' => 'Strict',
+        'samesite' => 'Lax',
     ]);
-    session_start();
+
+    if (!@session_start()) {
+        error_log('Session start failed. save_path=' . (string) ini_get('session.save_path'));
+    }
 }
 
 function data_store_available(): bool
