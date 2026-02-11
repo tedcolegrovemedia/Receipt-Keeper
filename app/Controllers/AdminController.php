@@ -54,7 +54,8 @@ class AdminController
 
     private function handlePostAction(): array
     {
-        if (!verify_csrf_token($_POST['csrf_token'] ?? null)) {
+        $csrfValid = verify_csrf_token($_POST['csrf_token'] ?? null);
+        if (!$csrfValid && !$this->isSameOriginPost()) {
             return ['', 'Session expired. Please refresh and try again.'];
         }
 
@@ -571,6 +572,49 @@ class AdminController
 
         $updated = rtrim($content) . "\n" . $line . "\n";
         return file_put_contents($path, $updated, LOCK_EX) !== false;
+    }
+
+    private function isSameOriginPost(): bool
+    {
+        if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? '')) !== 'POST') {
+            return false;
+        }
+
+        $host = $this->normalizedHost((string) ($_SERVER['HTTP_HOST'] ?? ''));
+        if ($host === '') {
+            return false;
+        }
+
+        $origin = trim((string) ($_SERVER['HTTP_ORIGIN'] ?? ''));
+        if ($origin !== '') {
+            $originHost = $this->normalizedHost((string) parse_url($origin, PHP_URL_HOST));
+            if ($originHost !== '' && $originHost === $host) {
+                return true;
+            }
+        }
+
+        $referer = trim((string) ($_SERVER['HTTP_REFERER'] ?? ''));
+        if ($referer !== '') {
+            $refererHost = $this->normalizedHost((string) parse_url($referer, PHP_URL_HOST));
+            if ($refererHost !== '' && $refererHost === $host) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function normalizedHost(string $host): string
+    {
+        $host = strtolower(trim($host));
+        $host = preg_replace('/:\d+$/', '', $host);
+        if (!is_string($host) || $host === '') {
+            return '';
+        }
+        if (strpos($host, 'www.') === 0) {
+            $host = substr($host, 4);
+        }
+        return $host;
     }
 
     private function buildChecks(): array
