@@ -46,6 +46,7 @@ It supports:
   - Single delete + page-level bulk delete.
   - Year filtering (`All` or specific year) and pagination.
   - CSV export for selected year or all years.
+  - CSV columns: Date, Vendor, Category, Business Purpose, Total.
   - CSV includes total sum row and USD formatting.
 
 - Admin tools:
@@ -60,6 +61,9 @@ It supports:
 - UI:
   - Light/dark mode toggle with persistence in localStorage.
   - Category reference table (accordion).
+  - Save confirmation modal after successful receipt save (auto-closes in 3 seconds).
+  - After save, the page scrolls back to the receipt capture section.
+  - Mobile layout is constrained and centered for smaller screens.
   - Footer disclaimer/copyright.
 
 ---
