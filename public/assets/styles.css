@@ -911,7 +911,11 @@ body.dark .admin-flash-error {
   justify-self: start;
 }
 
-.admin-tool #smtpSettingsBlock {
+.admin-tool #smtpSettingsBlock[hidden] {
+  display: none !important;
+}
+
+.admin-tool #smtpSettingsBlock:not([hidden]) {
   display: grid;
   gap: 10px;
 }

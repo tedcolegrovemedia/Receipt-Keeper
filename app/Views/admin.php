@@ -127,7 +127,7 @@
               />
             </label>
 
-            <div id="smtpSettingsBlock">
+            <div id="smtpSettingsBlock" <?php echo (($mailTransportValue ?? 'mail') === 'smtp') ? '' : 'hidden'; ?>>
               <label>
                 SMTP host
                 <input
