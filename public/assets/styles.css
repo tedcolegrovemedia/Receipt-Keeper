@@ -890,16 +890,24 @@ body.dark .admin-flash-error {
   display: grid;
   gap: 10px;
   align-content: start;
+  min-width: 0;
 }
 
 .admin-tool h3 {
   margin: 0;
   font-family: "Space Grotesk", sans-serif;
+  overflow-wrap: anywhere;
 }
 
 .admin-tool p {
   margin: 0;
   color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.admin-tool label {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .admin-tool code {
@@ -909,6 +917,11 @@ body.dark .admin-flash-error {
 
 .admin-tool .btn {
   justify-self: start;
+}
+
+.admin-tool input[type="file"] {
+  max-width: 100%;
+  min-width: 0;
 }
 
 .admin-tool #smtpSettingsBlock[hidden] {
