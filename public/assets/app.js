@@ -2445,7 +2445,7 @@ async function exportCsv() {
       ? receipts
       : receipts.filter((receipt) => getReceiptYear(receipt) === state.currentYear);
   if (scoped.length === 0) return;
-  const header = ["Date", "Vendor", "Location", "Category", "Business Purpose", "Total"];
+  const header = ["Date", "Vendor", "Category", "Business Purpose", "Total"];
   let sumTotal = 0;
   const rows = scoped.map((receipt) => {
     const value = Number(receipt.total);
@@ -2453,13 +2453,12 @@ async function exportCsv() {
     return [
       receipt.date || "",
       receipt.vendor || "",
-      receipt.location || "",
       receipt.category || "",
       receipt.businessPurpose || "",
       formatCurrency(Number.isFinite(value) ? value : 0),
     ];
   });
-  rows.push(["", "TOTAL", "", "", "", formatCurrency(sumTotal)]);
+  rows.push(["", "TOTAL", "", "", formatCurrency(sumTotal)]);
   const csv = [header, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
     .join("\n");

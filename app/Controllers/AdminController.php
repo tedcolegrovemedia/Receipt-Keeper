@@ -460,7 +460,7 @@ class AdminController
 
     private function buildReceiptsCsv(array $receipts): string
     {
-        $header = ['Date', 'Vendor', 'Location', 'Category', 'Business Purpose', 'Total'];
+        $header = ['Date', 'Vendor', 'Category', 'Business Purpose', 'Total'];
         $rows = [];
         $sum = 0.0;
 
@@ -473,14 +473,13 @@ class AdminController
             $rows[] = [
                 (string) ($receipt['date'] ?? ''),
                 (string) ($receipt['vendor'] ?? ''),
-                (string) ($receipt['location'] ?? ''),
                 (string) ($receipt['category'] ?? ''),
                 (string) ($receipt['businessPurpose'] ?? ''),
                 $this->formatUsd($total),
             ];
         }
 
-        $rows[] = ['', 'TOTAL', '', '', '', $this->formatUsd($sum)];
+        $rows[] = ['', 'TOTAL', '', '', $this->formatUsd($sum)];
         array_unshift($rows, $header);
 
         $lines = [];
