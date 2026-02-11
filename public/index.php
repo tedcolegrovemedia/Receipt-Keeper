@@ -25,6 +25,9 @@ switch ($path) {
     case '/login':
         (new AuthController())->login();
         break;
+    case '/forgot-password':
+        (new AuthController())->forgotPassword();
+        break;
     case '/logout':
         (new AuthController())->logout();
         break;

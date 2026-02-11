@@ -51,6 +51,46 @@ class AuthController
         render('login', ['error' => $error]);
     }
 
+    public function forgotPassword(): void
+    {
+        if (!empty($_SESSION['authenticated'])) {
+            redirect_to('');
+        }
+
+        $error = '';
+        $success = '';
+        $recoveryEmail = '';
+        $configuredEmail = get_forgot_password_email();
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $recoveryEmail = strtolower(trim((string) ($_POST['recovery_email'] ?? '')));
+            $new = (string) ($_POST['new_password'] ?? '');
+            $confirm = (string) ($_POST['confirm_password'] ?? '');
+
+            if (!verify_csrf_token($_POST['csrf_token'] ?? null)) {
+                $error = 'Session expired. Please refresh and try again.';
+            } elseif ($configuredEmail === '') {
+                $error = 'Recovery email is not configured. Use your existing password to sign in and set one.';
+            } elseif ($recoveryEmail === '' || $recoveryEmail !== strtolower($configuredEmail)) {
+                $error = 'Recovery email did not match.';
+            } elseif (strlen($new) < MIN_PASSWORD_LENGTH) {
+                $error = 'New password is too short. Use at least ' . MIN_PASSWORD_LENGTH . ' characters.';
+            } elseif ($new !== $confirm) {
+                $error = 'New passwords do not match.';
+            } elseif (!set_password_hash(password_hash($new, PASSWORD_DEFAULT))) {
+                $error = 'Could not reset password. Check folder permissions.';
+            } else {
+                $success = 'Password reset. You can sign in now.';
+            }
+        }
+
+        render('forgot-password', [
+            'error' => $error,
+            'success' => $success,
+            'recoveryEmail' => $recoveryEmail,
+        ]);
+    }
+
     public function logout(): void
     {
         $_SESSION = [];

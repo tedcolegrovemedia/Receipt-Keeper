@@ -4,6 +4,7 @@ config/config.local.php
 # App data (receipts, logs, uploads)
 data/*
 !data/.htaccess
+data/password.json
 
 # OS / editor
 .DS_Store

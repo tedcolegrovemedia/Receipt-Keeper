@@ -195,6 +195,15 @@
 
       <div class="grid">
         <label>
+          Recovery email for forgot password
+          <input
+            type="text"
+            name="forgot_email"
+            value="<?php echo htmlspecialchars($values['forgot_email'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+            required
+          />
+        </label>
+        <label>
           Admin password (min <?php echo (int) $minLength; ?> characters)
           <input type="password" name="password" autocomplete="new-password" required />
         </label>

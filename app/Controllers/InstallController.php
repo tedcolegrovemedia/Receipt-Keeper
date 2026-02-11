@@ -15,8 +15,10 @@ class InstallController
             'mysql' => mysql_available(),
         ];
         $defaultMode = $availability['sqlite'] ? 'sqlite' : 'json';
+        $defaultRecoveryEmail = get_forgot_password_email() !== '' ? get_forgot_password_email() : 'primerx24@gmail.com';
         $values = [
             'storage_mode' => $defaultMode,
+            'forgot_email' => $defaultRecoveryEmail,
             'veryfi_client_id' => '',
             'veryfi_client_secret' => '',
             'veryfi_username' => '',
@@ -31,6 +33,7 @@ class InstallController
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $values = [
                 'storage_mode' => trim((string) ($_POST['storage_mode'] ?? $defaultMode)),
+                'forgot_email' => strtolower(trim((string) ($_POST['forgot_email'] ?? $defaultRecoveryEmail))),
                 'veryfi_client_id' => trim((string) ($_POST['veryfi_client_id'] ?? '')),
                 'veryfi_client_secret' => trim((string) ($_POST['veryfi_client_secret'] ?? '')),
                 'veryfi_username' => trim((string) ($_POST['veryfi_username'] ?? '')),
@@ -56,6 +59,8 @@ class InstallController
                     $error = 'Password is too short. Use at least ' . MIN_PASSWORD_LENGTH . ' characters.';
                 } elseif ($password !== $confirm) {
                     $error = 'Passwords do not match.';
+                } elseif (!filter_var($values['forgot_email'], FILTER_VALIDATE_EMAIL)) {
+                    $error = 'Recovery email is required and must be a valid email address.';
                 } elseif ($values['storage_mode'] === 'sqlite' && !$availability['sqlite']) {
                     $error = 'SQLite is not available on this server.';
                 } elseif ($values['storage_mode'] === 'mysql') {
@@ -73,6 +78,8 @@ class InstallController
                     $hash = password_hash($password, PASSWORD_DEFAULT);
                     if (!set_password_hash($hash)) {
                         $error = 'Could not save password. Check folder permissions.';
+                    } elseif (!set_forgot_password_email($values['forgot_email'])) {
+                        $error = 'Could not save recovery email. Check folder permissions.';
                     } else {
                         $this->writeLocalConfig($values);
                         session_regenerate_id(true);

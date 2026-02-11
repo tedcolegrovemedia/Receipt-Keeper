@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Receipt Logger Login</title>
+    <title>Reset Password</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -21,10 +21,9 @@
         --line: #e2d3c4;
         --accent: #2f6f65;
         --accent-strong: #20524b;
-        --accent-soft: #d8eee9;
         --warning: #b65d3a;
+        --ok: #2f6f65;
         --shadow: 0 18px 40px rgba(18, 16, 14, 0.1);
-        --radius: 0px;
       }
 
       * {
@@ -43,47 +42,24 @@
         padding: 24px;
       }
 
-      body::before {
-        content: "";
-        position: fixed;
-        inset: 0;
-        background: linear-gradient(120deg, rgba(47, 111, 101, 0.12), transparent 45%),
-          linear-gradient(300deg, rgba(182, 93, 58, 0.14), transparent 50%);
-        pointer-events: none;
-        z-index: 0;
-      }
-
-      .login-card {
-        position: relative;
-        z-index: 1;
-        width: min(420px, 100%);
+      .card {
+        width: min(460px, 100%);
         background: var(--panel);
         border: 1px solid var(--line);
-        border-radius: var(--radius);
         padding: 28px;
         box-shadow: var(--shadow);
         display: grid;
-        gap: 16px;
-        animation: fadeUp 0.6s ease-out both;
+        gap: 14px;
       }
 
       h1 {
         font-family: "Space Grotesk", sans-serif;
-        margin: 0 0 6px;
+        margin: 0;
       }
 
       p {
         margin: 0;
         color: var(--muted);
-      }
-
-      .eyebrow {
-        text-transform: uppercase;
-        letter-spacing: 0.2em;
-        font-size: 0.75rem;
-        color: var(--accent-strong);
-        font-weight: 600;
-        margin: 0 0 8px;
       }
 
       label {
@@ -92,9 +68,8 @@
         font-weight: 600;
       }
 
-      input[type="text"],
+      input[type="email"],
       input[type="password"] {
-        border-radius: 12px;
         border: 1px solid var(--line);
         padding: 10px 12px;
         font-size: 1rem;
@@ -107,15 +82,8 @@
         background: var(--accent-strong);
         color: #fffaf4;
         padding: 10px 16px;
-        border-radius: 999px;
         font-weight: 600;
         cursor: pointer;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-      }
-
-      .btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 6px 12px rgba(47, 111, 101, 0.18);
       }
 
       .error {
@@ -123,43 +91,46 @@
         font-weight: 600;
       }
 
-      @keyframes fadeUp {
-        from {
-          opacity: 0;
-          transform: translateY(12px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
+      .success {
+        color: var(--ok);
+        font-weight: 600;
       }
     </style>
   </head>
   <body>
-    <form class="login-card" method="post" action="">
+    <form class="card" method="post" action="">
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
-      <div>
-        <p class="eyebrow">Receipt Logger</p>
-        <h1>Sign in</h1>
-        <p>Enter your shared password to continue.</p>
-      </div>
+      <h1>Reset password</h1>
+      <p>Enter the recovery email and set a new password.</p>
 
-      <?php if ($error): ?>
+      <?php if (!empty($error)): ?>
       <div class="error"><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></div>
       <?php endif; ?>
 
+      <?php if (!empty($success)): ?>
+      <div class="success"><?php echo htmlspecialchars($success, ENT_QUOTES, 'UTF-8'); ?></div>
+      <?php endif; ?>
+
       <label>
-        Username
-        <input type="text" name="username" autocomplete="username" required />
+        Recovery email
+        <input
+          type="email"
+          name="recovery_email"
+          autocomplete="email"
+          value="<?php echo htmlspecialchars($recoveryEmail ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+          required
+        />
       </label>
       <label>
-        Password
-        <input type="password" name="password" autocomplete="current-password" required />
+        New password
+        <input type="password" name="new_password" autocomplete="new-password" required />
       </label>
-      <button class="btn" type="submit">Sign in</button>
-      <p style="font-size: 0.95rem;">
-        <a href="<?php echo htmlspecialchars(url_path('forgot-password'), ENT_QUOTES, 'UTF-8'); ?>">Forgot password?</a>
-      </p>
+      <label>
+        Confirm new password
+        <input type="password" name="confirm_password" autocomplete="new-password" required />
+      </label>
+      <button class="btn" type="submit">Reset password</button>
+      <p><a href="<?php echo htmlspecialchars(url_path('login'), ENT_QUOTES, 'UTF-8'); ?>">Back to sign in</a></p>
     </form>
   </body>
 </html>

@@ -83,27 +83,61 @@ function data_store_available(): bool
     return is_dir(DATA_DIR) && is_writable(DATA_DIR);
 }
 
+function load_password_record(): array
+{
+    if (!is_file(PASSWORD_FILE)) {
+        return [];
+    }
+    $raw = file_get_contents(PASSWORD_FILE);
+    if ($raw === false || trim($raw) === '') {
+        return [];
+    }
+    $data = json_decode($raw, true);
+    return is_array($data) ? $data : [];
+}
+
+function save_password_record(array $data): bool
+{
+    if (!data_store_available()) {
+        return false;
+    }
+    $payload = [
+        'hash' => isset($data['hash']) ? (string) $data['hash'] : '',
+        'forgot_email' => isset($data['forgot_email']) ? strtolower(trim((string) $data['forgot_email'])) : '',
+    ];
+    return file_put_contents(PASSWORD_FILE, json_encode($payload, JSON_PRETTY_PRINT), LOCK_EX) !== false;
+}
+
 function get_password_hash(): string
 {
-    if (is_file(PASSWORD_FILE)) {
-        $raw = file_get_contents(PASSWORD_FILE);
-        if ($raw !== false) {
-            $data = json_decode($raw, true);
-            if (is_array($data) && !empty($data['hash'])) {
-                return (string) $data['hash'];
-            }
-        }
+    $data = load_password_record();
+    if (!empty($data['hash'])) {
+        return (string) $data['hash'];
     }
     return '';
 }
 
 function set_password_hash(string $hash): bool
 {
-    if (!data_store_available()) {
-        return false;
+    $data = load_password_record();
+    $data['hash'] = $hash;
+    return save_password_record($data);
+}
+
+function get_forgot_password_email(): string
+{
+    $data = load_password_record();
+    if (!empty($data['forgot_email'])) {
+        return strtolower(trim((string) $data['forgot_email']));
     }
-    $payload = json_encode(['hash' => $hash], JSON_PRETTY_PRINT);
-    return file_put_contents(PASSWORD_FILE, $payload, LOCK_EX) !== false;
+    return '';
+}
+
+function set_forgot_password_email(string $email): bool
+{
+    $data = load_password_record();
+    $data['forgot_email'] = strtolower(trim($email));
+    return save_password_record($data);
 }
 
 function get_client_ip(): string
