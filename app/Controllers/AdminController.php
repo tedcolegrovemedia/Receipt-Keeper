@@ -56,6 +56,7 @@ class AdminController
             'success' => $success,
             'ocrRemainingValue' => $ocrRemaining === null ? '' : (string) $ocrRemaining,
             'ocrLimit' => $ocrLimit,
+            'appUsernameValue' => get_app_username(),
             'appBasePathValue' => defined('APP_BASE_PATH') ? (string) APP_BASE_PATH : '',
             'mailTransportValue' => app_mail_transport(),
             'mailFromEmailValue' => (string) MAIL_FROM_EMAIL,
@@ -82,6 +83,8 @@ class AdminController
         switch ($action) {
             case 'update_ocr_remaining':
                 return $this->handleUpdateOcrRemaining();
+            case 'update_app_username':
+                return $this->handleUpdateAppUsername();
             case 'update_reset_pin':
                 return $this->handleUpdateResetPin();
             case 'update_mail_settings':
@@ -151,6 +154,21 @@ class AdminController
         }
 
         return ['Reset PIN updated.', ''];
+    }
+
+    private function handleUpdateAppUsername(): array
+    {
+        $username = (string) ($_POST['app_username'] ?? '');
+        $normalized = normalize_app_username($username);
+        if ($normalized === '') {
+            return ['', 'Username must be 3-32 chars using only letters, numbers, dot, dash, or underscore.'];
+        }
+
+        if (!set_app_username($normalized)) {
+            return ['', 'Could not save username. Check data folder permissions.'];
+        }
+
+        return ['Username updated to ' . $normalized . '.', ''];
     }
 
     private function handleUpdateMailSettings(): array

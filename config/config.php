@@ -159,6 +159,21 @@ function data_store_available(): bool
     return is_dir(DATA_DIR) && is_writable(DATA_DIR);
 }
 
+function normalize_app_username(string $username): string
+{
+    $username = strtolower(trim($username));
+    if ($username === '') {
+        return '';
+    }
+    if (strlen($username) < 3 || strlen($username) > 32) {
+        return '';
+    }
+    if (preg_match('/^[a-z0-9._-]+$/', $username) !== 1) {
+        return '';
+    }
+    return $username;
+}
+
 function load_password_record(): array
 {
     if (!is_file(PASSWORD_FILE)) {
@@ -179,6 +194,7 @@ function save_password_record(array $data): bool
     }
     $payload = [
         'hash' => isset($data['hash']) ? (string) $data['hash'] : '',
+        'username' => isset($data['username']) ? normalize_app_username((string) $data['username']) : '',
         'reset_pin_hash' => isset($data['reset_pin_hash']) ? (string) $data['reset_pin_hash'] : '',
     ];
     return file_put_contents(PASSWORD_FILE, json_encode($payload, JSON_PRETTY_PRINT), LOCK_EX) !== false;
@@ -197,6 +213,30 @@ function set_password_hash(string $hash): bool
 {
     $data = load_password_record();
     $data['hash'] = $hash;
+    return save_password_record($data);
+}
+
+function get_app_username(): string
+{
+    $data = load_password_record();
+    if (!empty($data['username'])) {
+        $normalized = normalize_app_username((string) $data['username']);
+        if ($normalized !== '') {
+            return $normalized;
+        }
+    }
+    return normalize_app_username((string) APP_USERNAME) ?: 'admin';
+}
+
+function set_app_username(string $username): bool
+{
+    $normalized = normalize_app_username($username);
+    if ($normalized === '') {
+        return false;
+    }
+
+    $data = load_password_record();
+    $data['username'] = $normalized;
     return save_password_record($data);
 }
 

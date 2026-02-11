@@ -30,10 +30,11 @@ class AuthController
             } elseif (!verify_csrf_or_same_origin($_POST['csrf_token'] ?? null)) {
                 $error = 'Session expired. Please refresh and try again.';
             } else {
-                $username = trim($_POST['username'] ?? '');
+                $username = normalize_app_username((string) ($_POST['username'] ?? ''));
                 $password = $_POST['password'] ?? '';
+                $expectedUsername = get_app_username();
 
-                if ($username === APP_USERNAME && password_verify($password, get_password_hash())) {
+                if ($username === $expectedUsername && password_verify($password, get_password_hash())) {
                     session_regenerate_id(true);
                     $_SESSION['authenticated'] = true;
                     clear_failed_attempts($ip);

@@ -17,7 +17,8 @@ It supports:
 ## Core Features
 
 - Authentication:
-  - Shared login (`admin` username + hashed password).
+  - Shared login (username + hashed password).
+  - Default username is `admin` and can be changed in Admin.
   - Forgot password with a 4-digit reset PIN + new password.
   - Rate-limited login attempts.
 
@@ -50,6 +51,7 @@ It supports:
 - Admin tools:
   - Runtime/installation diagnostics.
   - Storage checks (JSON/SQLite/MySQL).
+  - Login username editor.
   - OCR remaining counter editor (Veryfi quota).
   - Reset PIN editor for forgot-password flow.
   - Mail transport settings (`mail()` or SMTP).

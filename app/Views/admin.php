@@ -97,6 +97,27 @@
 
           <form class="admin-tool" method="post" action="">
             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
+            <input type="hidden" name="admin_action" value="update_app_username" />
+            <h3>Login Username</h3>
+            <p>Change the username used on the login screen.</p>
+            <label>
+              Username
+              <input
+                type="text"
+                name="app_username"
+                value="<?php echo htmlspecialchars((string) ($appUsernameValue ?? 'admin'), ENT_QUOTES, 'UTF-8'); ?>"
+                minlength="3"
+                maxlength="32"
+                pattern="[A-Za-z0-9._-]+"
+                autocomplete="username"
+                required
+              />
+            </label>
+            <button class="btn primary" type="submit">Save Username</button>
+          </form>
+
+          <form class="admin-tool" method="post" action="">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
             <input type="hidden" name="admin_action" value="update_reset_pin" />
             <h3>Reset PIN</h3>
             <p>Set the 4-digit PIN used on the forgot-password page.</p>
