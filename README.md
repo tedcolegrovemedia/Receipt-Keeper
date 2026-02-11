@@ -18,8 +18,7 @@ It supports:
 
 - Authentication:
   - Shared login (`admin` username + hashed password).
-  - Forgot password with 4-digit code.
-  - Recovery can use email or SMS (Twilio).
+  - Forgot password with a 4-digit reset PIN + new password.
   - Rate-limited login attempts.
 
 - Receipt capture:
@@ -52,9 +51,9 @@ It supports:
   - Runtime/installation diagnostics.
   - Storage checks (JSON/SQLite/MySQL).
   - OCR remaining counter editor (Veryfi quota).
+  - Reset PIN editor for forgot-password flow.
   - Mail transport settings (`mail()` or SMTP).
   - Test email sender.
-  - Update recovery email.
   - Full backup export ZIP.
   - Backup import ZIP.
   - Base path override for subfolder deployments.
@@ -129,13 +128,12 @@ index.php               # root fallback -> public/index.php
 Optional PHP extensions by feature:
 - `pdo_sqlite` for SQLite storage
 - `pdo_mysql` for MySQL storage
-- `curl` for Veryfi OCR and Twilio SMS
+- `curl` for Veryfi OCR
 - `zip` (`ZipArchive`) for full backup export/import
 - `stream_socket_client` for SMTP mail transport
 
 Third-party services (optional):
 - Veryfi OCR
-- Twilio SMS (forgot-password delivery)
 
 ---
 
@@ -175,7 +173,7 @@ Installer appears when no password file exists.
 
 It sets:
 - admin password hash
-- recovery contact (email and/or phone; at least one required)
+- 4-digit reset PIN for forgot-password
 - storage mode (`json`, `sqlite`, `mysql`)
 - optional Veryfi credentials
 
@@ -212,11 +210,6 @@ define('VERYFI_CLIENT_SECRET', '');
 define('VERYFI_USERNAME', '');
 define('VERYFI_API_KEY', '');
 
-// Twilio (optional SMS reset)
-define('TWILIO_ACCOUNT_SID', '');
-define('TWILIO_AUTH_TOKEN', '');
-define('TWILIO_FROM_NUMBER', '');
-
 // Mail settings (editable in Admin)
 define('MAIL_TRANSPORT', 'mail'); // mail|smtp
 define('MAIL_FROM_EMAIL', '');
@@ -233,8 +226,7 @@ define('SMTP_TIMEOUT', 20);
 
 - `password.json` stores:
   - bcrypt password hash
-  - recovery email
-  - recovery phone
+  - reset PIN hash
 - `receipts.json` or `receipts.sqlite` depending on active storage
 - `uploads/` stores processed receipt images/PDFs
 
@@ -314,9 +306,9 @@ Also ensure:
 - install/runtime checks
 - storage diagnostics and connectivity probes
 - OCR remaining counter editor
+- reset PIN editor
 - mail transport config (`mail()` / SMTP)
 - email test sender
-- recovery email update
 - full export ZIP generator
 - import ZIP restore
 - base path updater
@@ -350,10 +342,9 @@ Common issues:
   - check Veryfi quota remaining
 - PDF OCR unavailable:
   - verify PDF.js files exist in `public/vendor/pdfjs/`
-- Email reset not arriving:
-  - run Admin "Send Test Email"
-  - review `data/mail-debug.log`
-  - if SMTP selected, confirm host/port/encryption/auth
+- Forgot-password reset not working:
+  - verify a reset PIN is configured in Admin
+  - ensure PIN is exactly 4 digits
 
 ---
 

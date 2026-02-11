@@ -15,12 +15,10 @@ class InstallController
             'mysql' => mysql_available(),
         ];
         $defaultMode = $availability['sqlite'] ? 'sqlite' : 'json';
-        $defaultRecoveryEmail = get_forgot_password_email();
-        $defaultRecoveryPhone = get_forgot_password_phone();
         $values = [
             'storage_mode' => $defaultMode,
-            'forgot_email' => $defaultRecoveryEmail,
-            'forgot_phone' => $defaultRecoveryPhone,
+            'reset_pin' => '',
+            'reset_pin_confirm' => '',
             'veryfi_client_id' => '',
             'veryfi_client_secret' => '',
             'veryfi_username' => '',
@@ -35,8 +33,8 @@ class InstallController
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $values = [
                 'storage_mode' => trim((string) ($_POST['storage_mode'] ?? $defaultMode)),
-                'forgot_email' => strtolower(trim((string) ($_POST['forgot_email'] ?? $defaultRecoveryEmail))),
-                'forgot_phone' => trim((string) ($_POST['forgot_phone'] ?? $defaultRecoveryPhone)),
+                'reset_pin' => trim((string) ($_POST['reset_pin'] ?? '')),
+                'reset_pin_confirm' => trim((string) ($_POST['reset_pin_confirm'] ?? '')),
                 'veryfi_client_id' => trim((string) ($_POST['veryfi_client_id'] ?? '')),
                 'veryfi_client_secret' => trim((string) ($_POST['veryfi_client_secret'] ?? '')),
                 'veryfi_username' => trim((string) ($_POST['veryfi_username'] ?? '')),
@@ -58,16 +56,16 @@ class InstallController
             } else {
                 $password = (string) ($_POST['password'] ?? '');
                 $confirm = (string) ($_POST['confirm_password'] ?? '');
+                $resetPin = $values['reset_pin'];
+                $resetPinConfirm = $values['reset_pin_confirm'];
                 if (strlen($password) < MIN_PASSWORD_LENGTH) {
                     $error = 'Password is too short. Use at least ' . MIN_PASSWORD_LENGTH . ' characters.';
                 } elseif ($password !== $confirm) {
                     $error = 'Passwords do not match.';
-                } elseif ($values['forgot_email'] === '' && $values['forgot_phone'] === '') {
-                    $error = 'Set at least one recovery contact (email or phone).';
-                } elseif ($values['forgot_email'] !== '' && !filter_var($values['forgot_email'], FILTER_VALIDATE_EMAIL)) {
-                    $error = 'Recovery email must be a valid email address.';
-                } elseif ($values['forgot_phone'] !== '' && !preg_match('/^\+[1-9]\d{7,14}$/', $values['forgot_phone'])) {
-                    $error = 'Recovery phone must be in E.164 format (for example: +15551234567).';
+                } elseif (!preg_match('/^\d{4}$/', $resetPin)) {
+                    $error = 'Reset PIN must be exactly 4 digits.';
+                } elseif ($resetPin !== $resetPinConfirm) {
+                    $error = 'Reset PIN values do not match.';
                 } elseif ($values['storage_mode'] === 'sqlite' && !$availability['sqlite']) {
                     $error = 'SQLite is not available on this server.';
                 } elseif ($values['storage_mode'] === 'mysql') {
@@ -83,12 +81,11 @@ class InstallController
                     }
                 } else {
                     $hash = password_hash($password, PASSWORD_DEFAULT);
+                    $pinHash = password_hash($resetPin, PASSWORD_DEFAULT);
                     if (!set_password_hash($hash)) {
                         $error = 'Could not save password. Check folder permissions.';
-                    } elseif (!set_forgot_password_email($values['forgot_email'])) {
-                        $error = 'Could not save recovery email. Check folder permissions.';
-                    } elseif (!set_forgot_password_phone($values['forgot_phone'])) {
-                        $error = 'Could not save recovery phone. Check folder permissions.';
+                    } elseif (!set_password_reset_pin_hash($pinHash)) {
+                        $error = 'Could not save reset PIN. Check folder permissions.';
                     } else {
                         $this->writeLocalConfig($values);
                         session_regenerate_id(true);

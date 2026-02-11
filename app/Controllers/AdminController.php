@@ -57,7 +57,6 @@ class AdminController
             'ocrRemainingValue' => $ocrRemaining === null ? '' : (string) $ocrRemaining,
             'ocrLimit' => $ocrLimit,
             'appBasePathValue' => defined('APP_BASE_PATH') ? (string) APP_BASE_PATH : '',
-            'defaultTestEmail' => get_forgot_password_email(),
             'mailTransportValue' => app_mail_transport(),
             'mailFromEmailValue' => (string) MAIL_FROM_EMAIL,
             'mailFromNameValue' => (string) MAIL_FROM_NAME,
@@ -83,10 +82,10 @@ class AdminController
         switch ($action) {
             case 'update_ocr_remaining':
                 return $this->handleUpdateOcrRemaining();
+            case 'update_reset_pin':
+                return $this->handleUpdateResetPin();
             case 'update_mail_settings':
                 return $this->handleUpdateMailSettings();
-            case 'update_recovery_email':
-                return $this->handleUpdateRecoveryEmail();
             case 'test_email':
                 return $this->handleTestEmail();
             case 'export_bundle':
@@ -133,6 +132,25 @@ class AdminController
 
         $label = $normalized === '' ? 'auto-detect' : $normalized;
         return ["Base path saved as {$label}. Refresh the page to apply.", ''];
+    }
+
+    private function handleUpdateResetPin(): array
+    {
+        $pin = trim((string) ($_POST['reset_pin'] ?? ''));
+        $confirm = trim((string) ($_POST['reset_pin_confirm'] ?? ''));
+
+        if (!preg_match('/^\d{4}$/', $pin)) {
+            return ['', 'Reset PIN must be exactly 4 digits.'];
+        }
+        if ($pin !== $confirm) {
+            return ['', 'Reset PIN values do not match.'];
+        }
+
+        if (!set_password_reset_pin_hash(password_hash($pin, PASSWORD_DEFAULT))) {
+            return ['', 'Could not save reset PIN. Check data folder permissions.'];
+        }
+
+        return ['Reset PIN updated.', ''];
     }
 
     private function handleUpdateMailSettings(): array
@@ -195,31 +213,11 @@ class AdminController
         return ['Mail settings saved. Refresh the page to apply all changes.', ''];
     }
 
-    private function handleUpdateRecoveryEmail(): array
-    {
-        $email = strtolower(trim((string) ($_POST['recovery_email'] ?? '')));
-        if ($email === '') {
-            return ['', 'Recovery email is required.'];
-        }
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return ['', 'Recovery email must be a valid email address.'];
-        }
-        if (!set_forgot_password_email($email)) {
-            return ['', 'Could not save recovery email. Check data folder permissions.'];
-        }
-
-        return ['Recovery email updated to ' . $email . '.', ''];
-    }
-
     private function handleTestEmail(): array
     {
         $destination = strtolower(trim((string) ($_POST['test_email'] ?? '')));
         if ($destination === '') {
-            $destination = get_forgot_password_email();
-        }
-
-        if ($destination === '') {
-            return ['', 'No destination email provided and no recovery email is configured.'];
+            return ['', 'Destination email is required.'];
         }
         if (!filter_var($destination, FILTER_VALIDATE_EMAIL)) {
             return ['', 'Test email must be a valid email address.'];
@@ -668,9 +666,7 @@ class AdminController
 
         $storageReady = ensure_storage_ready();
         $passwordSet = get_password_hash() !== '';
-        $recoveryEmail = get_forgot_password_email();
-        $recoveryPhone = get_forgot_password_phone();
-        $recoveryReady = $recoveryEmail !== '' || $recoveryPhone !== '';
+        $resetPinSet = get_password_reset_pin_hash() !== '';
         $veryfiConfigured = $this->veryfiConfigured();
 
         $checks[] = $this->makeCheck(
@@ -710,10 +706,10 @@ class AdminController
             $passwordSet ? 'Password hash present.' : 'Password is not configured. Run installer.'
         );
         $checks[] = $this->makeCheck(
-            'Recovery contact configured',
-            false,
-            $recoveryReady,
-            $recoveryReady ? $this->recoveryLabel($recoveryEmail, $recoveryPhone) : 'No recovery email or phone configured.'
+            'Reset PIN configured',
+            true,
+            $resetPinSet,
+            $resetPinSet ? 'Forgot-password reset PIN is configured.' : 'Forgot-password reset PIN is not configured.'
         );
         $checks[] = $this->makeCheck(
             'Storage mode resolved',
@@ -798,7 +794,7 @@ class AdminController
         $curlAvailable = function_exists('curl_init');
         $checks[] = $this->makeCheck(
             'cURL extension available',
-            $veryfiConfigured || $this->twilioConfigured(),
+            $veryfiConfigured,
             $curlAvailable,
             $curlAvailable ? 'cURL is available.' : 'cURL extension missing.'
         );
@@ -824,13 +820,6 @@ class AdminController
             false,
             $mailAvailable,
             $mailDetail
-        );
-        $twilioConfigured = $this->twilioConfigured();
-        $checks[] = $this->makeCheck(
-            'Twilio SMS configured',
-            false,
-            $twilioConfigured,
-            $twilioConfigured ? 'Twilio credentials configured.' : 'Twilio credentials not configured.'
         );
 
         return $checks;
@@ -896,11 +885,6 @@ class AdminController
         return true;
     }
 
-    private function twilioConfigured(): bool
-    {
-        return TWILIO_ACCOUNT_SID !== '' && TWILIO_AUTH_TOKEN !== '' && TWILIO_FROM_NUMBER !== '';
-    }
-
     private function pdfJsAvailable(): bool
     {
         $scriptCandidates = ['pdf.min.mjs', 'pdf.min.js'];
@@ -962,45 +946,4 @@ class AdminController
         return 'Local OCR';
     }
 
-    private function recoveryLabel(string $email, string $phone): string
-    {
-        $parts = [];
-        $email = trim($email);
-        $phone = trim($phone);
-
-        if ($email !== '') {
-            $parts[] = 'Email: ' . $this->maskEmail($email);
-        }
-        if ($phone !== '') {
-            $parts[] = 'Phone: ' . $this->maskPhone($phone);
-        }
-
-        return implode(' | ', $parts);
-    }
-
-    private function maskEmail(string $email): string
-    {
-        if (strpos($email, '@') === false) {
-            return $email;
-        }
-        $parts = explode('@', $email, 2);
-        $local = trim($parts[0]);
-        $domain = trim($parts[1]);
-        if ($local === '') {
-            return '***@' . $domain;
-        }
-        if (strlen($local) <= 2) {
-            return substr($local, 0, 1) . '***@' . $domain;
-        }
-        return substr($local, 0, 1) . str_repeat('*', strlen($local) - 2) . substr($local, -1) . '@' . $domain;
-    }
-
-    private function maskPhone(string $phone): string
-    {
-        $digits = preg_replace('/\D+/', '', $phone);
-        if (!is_string($digits) || strlen($digits) < 4) {
-            return $phone;
-        }
-        return '***-***-' . substr($digits, -4);
-    }
 }

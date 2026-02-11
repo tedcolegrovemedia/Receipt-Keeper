@@ -186,7 +186,7 @@
       <div>
         <p class="eyebrow">Receipt Keeper</p>
         <h1>Initial setup</h1>
-        <p>Set your admin password and (optionally) add Veryfi OCR credentials.</p>
+        <p>Set your admin password, reset PIN, and optionally add Veryfi OCR credentials.</p>
       </div>
 
       <?php if (!empty($error)): ?>
@@ -195,20 +195,29 @@
 
       <div class="grid">
         <label>
-          Recovery email for forgot password
+          4-digit reset PIN
           <input
-            type="text"
-            name="forgot_email"
-            value="<?php echo htmlspecialchars($values['forgot_email'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+            type="password"
+            name="reset_pin"
+            inputmode="numeric"
+            pattern="\d{4}"
+            maxlength="4"
+            autocomplete="off"
+            value="<?php echo htmlspecialchars($values['reset_pin'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+            required
           />
         </label>
         <label>
-          Recovery phone for SMS (optional, E.164 format)
+          Confirm 4-digit reset PIN
           <input
-            type="text"
-            name="forgot_phone"
-            value="<?php echo htmlspecialchars($values['forgot_phone'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-            placeholder="+15551234567"
+            type="password"
+            name="reset_pin_confirm"
+            inputmode="numeric"
+            pattern="\d{4}"
+            maxlength="4"
+            autocomplete="off"
+            value="<?php echo htmlspecialchars($values['reset_pin_confirm'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+            required
           />
         </label>
         <label>

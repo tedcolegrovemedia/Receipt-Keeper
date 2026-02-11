@@ -15,9 +15,6 @@ const VENDOR_MEMORY_FILE = DATA_DIR . '/vendor-memory.json';
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOGIN_WINDOW_SECONDS = 900;
 const MIN_PASSWORD_LENGTH = 12;
-const FORGOT_CODE_TTL_SECONDS = 600;
-const FORGOT_CODE_RESEND_SECONDS = 45;
-const FORGOT_CODE_MAX_ATTEMPTS = 5;
 
 // Optional local secrets file (do not commit).
 $localConfig = LOCAL_CONFIG_FILE;
@@ -60,15 +57,6 @@ if (!defined('MYSQL_USERNAME')) {
 }
 if (!defined('MYSQL_PASSWORD')) {
     define('MYSQL_PASSWORD', '');
-}
-if (!defined('TWILIO_ACCOUNT_SID')) {
-    define('TWILIO_ACCOUNT_SID', '');
-}
-if (!defined('TWILIO_AUTH_TOKEN')) {
-    define('TWILIO_AUTH_TOKEN', '');
-}
-if (!defined('TWILIO_FROM_NUMBER')) {
-    define('TWILIO_FROM_NUMBER', '');
 }
 if (!defined('MAIL_TRANSPORT')) {
     define('MAIL_TRANSPORT', 'mail');
@@ -191,8 +179,7 @@ function save_password_record(array $data): bool
     }
     $payload = [
         'hash' => isset($data['hash']) ? (string) $data['hash'] : '',
-        'forgot_email' => isset($data['forgot_email']) ? strtolower(trim((string) $data['forgot_email'])) : '',
-        'forgot_phone' => isset($data['forgot_phone']) ? trim((string) $data['forgot_phone']) : '',
+        'reset_pin_hash' => isset($data['reset_pin_hash']) ? (string) $data['reset_pin_hash'] : '',
     ];
     return file_put_contents(PASSWORD_FILE, json_encode($payload, JSON_PRETTY_PRINT), LOCK_EX) !== false;
 }
@@ -213,35 +200,19 @@ function set_password_hash(string $hash): bool
     return save_password_record($data);
 }
 
-function get_forgot_password_email(): string
+function get_password_reset_pin_hash(): string
 {
     $data = load_password_record();
-    if (!empty($data['forgot_email'])) {
-        return strtolower(trim((string) $data['forgot_email']));
+    if (!empty($data['reset_pin_hash'])) {
+        return (string) $data['reset_pin_hash'];
     }
     return '';
 }
 
-function set_forgot_password_email(string $email): bool
+function set_password_reset_pin_hash(string $hash): bool
 {
     $data = load_password_record();
-    $data['forgot_email'] = strtolower(trim($email));
-    return save_password_record($data);
-}
-
-function get_forgot_password_phone(): string
-{
-    $data = load_password_record();
-    if (!empty($data['forgot_phone'])) {
-        return trim((string) $data['forgot_phone']);
-    }
-    return '';
-}
-
-function set_forgot_password_phone(string $phone): bool
-{
-    $data = load_password_record();
-    $data['forgot_phone'] = trim($phone);
+    $data['reset_pin_hash'] = $hash;
     return save_password_record($data);
 }
 

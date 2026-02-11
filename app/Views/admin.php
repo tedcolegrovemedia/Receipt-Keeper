@@ -34,7 +34,7 @@
         <div>
           <p class="eyebrow">Admin</p>
           <h1>Installation Diagnostics</h1>
-          <p class="lede">Quick checks for storage, OCR, and recovery setup.</p>
+          <p class="lede">Quick checks for storage, OCR, and runtime setup.</p>
         </div>
         <div class="hero-card">
           <div class="stat">
@@ -97,9 +97,41 @@
 
           <form class="admin-tool" method="post" action="">
             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
+            <input type="hidden" name="admin_action" value="update_reset_pin" />
+            <h3>Reset PIN</h3>
+            <p>Set the 4-digit PIN used on the forgot-password page.</p>
+            <label>
+              New 4-digit PIN
+              <input
+                type="password"
+                name="reset_pin"
+                inputmode="numeric"
+                pattern="\d{4}"
+                maxlength="4"
+                autocomplete="off"
+                required
+              />
+            </label>
+            <label>
+              Confirm 4-digit PIN
+              <input
+                type="password"
+                name="reset_pin_confirm"
+                inputmode="numeric"
+                pattern="\d{4}"
+                maxlength="4"
+                autocomplete="off"
+                required
+              />
+            </label>
+            <button class="btn primary" type="submit">Save Reset PIN</button>
+          </form>
+
+          <form class="admin-tool" method="post" action="">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
             <input type="hidden" name="admin_action" value="update_mail_settings" />
             <h3>Mail Server Settings</h3>
-            <p>Choose transport and SMTP settings used for recovery and test emails.</p>
+            <p>Choose transport and SMTP settings used for test emails.</p>
 
             <label>
               Mail transport
@@ -201,34 +233,16 @@
 
           <form class="admin-tool" method="post" action="">
             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
-            <input type="hidden" name="admin_action" value="update_recovery_email" />
-            <h3>Recovery Email</h3>
-            <p>Update the email used for forgot-password recovery codes.</p>
-            <label>
-              Recovery email
-              <input
-                type="email"
-                name="recovery_email"
-                placeholder="name@example.com"
-                value="<?php echo htmlspecialchars((string) ($defaultTestEmail ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
-                required
-              />
-            </label>
-            <button class="btn primary" type="submit">Save Recovery Email</button>
-          </form>
-
-          <form class="admin-tool" method="post" action="">
-            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
             <input type="hidden" name="admin_action" value="test_email" />
             <h3>Email Test</h3>
             <p>Send a test email to verify server mail delivery.</p>
             <label>
-              Destination email (blank uses recovery email)
+              Destination email
               <input
                 type="email"
                 name="test_email"
                 placeholder="name@example.com"
-                value="<?php echo htmlspecialchars((string) ($defaultTestEmail ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                value=""
               />
             </label>
             <button class="btn primary" type="submit">Send Test Email</button>
