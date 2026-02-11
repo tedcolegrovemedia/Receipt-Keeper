@@ -61,14 +61,16 @@ class AuthController
         $success = '';
         $codeInput = '';
         $configuredEmail = get_forgot_password_email();
+        $configuredPhone = get_forgot_password_phone();
+        $delivery = $this->resolveRecoveryDelivery($configuredEmail, $configuredPhone);
         $state = $this->loadForgotPasswordState();
         $now = time();
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $action = (string) ($_POST['action'] ?? '');
 
-            if ($configuredEmail === '') {
-                $error = 'Recovery email is not configured. Use your existing password to sign in and set one.';
+            if ($delivery['channel'] === 'none') {
+                $error = 'Recovery contact is not configured. Set a recovery email or phone in setup.';
             } else {
                 if ($action === 'send_code') {
                     $lastSent = isset($state['sent_at']) ? (int) $state['sent_at'] : 0;
@@ -77,8 +79,8 @@ class AuthController
                         $error = 'Please wait ' . $wait . ' second(s) before sending a new code.';
                     } else {
                         $code = str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
-                        if (!$this->sendRecoveryCode($configuredEmail, $code)) {
-                            $error = 'Could not send reset code email. Check server mail settings.';
+                        if (!$this->sendRecoveryCode($delivery, $code)) {
+                            $error = 'Could not send reset code. Check recovery delivery settings.';
                         } else {
                             $state = [
                                 'code_hash' => password_hash($code, PASSWORD_DEFAULT),
@@ -88,7 +90,7 @@ class AuthController
                                 'verified' => false,
                             ];
                             $this->saveForgotPasswordState($state);
-                            $success = 'Code sent to ' . $this->maskEmail($configuredEmail) . '.';
+                            $success = 'Code sent to ' . $delivery['masked'] . '.';
                         }
                     }
                 } elseif ($action === 'verify_code') {
@@ -157,7 +159,8 @@ class AuthController
         render('forgot-password', [
             'error' => $error,
             'success' => $success,
-            'maskedEmail' => $this->maskEmail($configuredEmail),
+            'maskedDestination' => $delivery['masked'],
+            'deliveryLabel' => $delivery['channel'] === 'sms' ? 'SMS phone' : 'Recovery email',
             'codeInput' => $codeInput,
             'codeSent' => $codeSent,
             'codeVerified' => $codeVerified,
@@ -258,7 +261,18 @@ class AuthController
         return substr($local, 0, 1) . str_repeat('*', max(2, strlen($local) - 2)) . substr($local, -1) . '@' . $domain;
     }
 
-    private function sendRecoveryCode(string $email, string $code): bool
+    private function sendRecoveryCode(array $delivery, string $code): bool
+    {
+        if (($delivery['channel'] ?? '') === 'sms') {
+            return $this->sendRecoveryCodeSms((string) $delivery['destination'], $code);
+        }
+        if (($delivery['channel'] ?? '') === 'email') {
+            return $this->sendRecoveryCodeEmail((string) $delivery['destination'], $code);
+        }
+        return false;
+    }
+
+    private function sendRecoveryCodeEmail(string $email, string $code): bool
     {
         if (!function_exists('mail')) {
             return false;
@@ -276,5 +290,75 @@ class AuthController
             'Content-Type: text/plain; charset=UTF-8',
         ];
         return @mail($email, $subject, $body, implode("\r\n", $headers));
+    }
+
+    private function sendRecoveryCodeSms(string $phone, string $code): bool
+    {
+        if (!function_exists('curl_init')) {
+            return false;
+        }
+        if (!$this->twilioConfigured()) {
+            return false;
+        }
+
+        $url = 'https://api.twilio.com/2010-04-01/Accounts/' . rawurlencode(TWILIO_ACCOUNT_SID) . '/Messages.json';
+        $body = "Your Receipt Keeper reset code is {$code}. It expires in 10 minutes.";
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_USERPWD, TWILIO_ACCOUNT_SID . ':' . TWILIO_AUTH_TOKEN);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+            'From' => TWILIO_FROM_NUMBER,
+            'To' => $phone,
+            'Body' => $body,
+        ]));
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $ok = $response !== false && $httpCode >= 200 && $httpCode < 300;
+        if (function_exists('curl_close')) {
+            curl_close($ch);
+        }
+        return $ok;
+    }
+
+    private function twilioConfigured(): bool
+    {
+        return TWILIO_ACCOUNT_SID !== '' && TWILIO_AUTH_TOKEN !== '' && TWILIO_FROM_NUMBER !== '';
+    }
+
+    private function resolveRecoveryDelivery(string $email, string $phone): array
+    {
+        $normalizedEmail = strtolower(trim($email));
+        $normalizedPhone = trim($phone);
+        if ($normalizedPhone !== '' && $this->twilioConfigured()) {
+            return [
+                'channel' => 'sms',
+                'destination' => $normalizedPhone,
+                'masked' => $this->maskPhone($normalizedPhone),
+            ];
+        }
+        if ($normalizedEmail !== '') {
+            return [
+                'channel' => 'email',
+                'destination' => $normalizedEmail,
+                'masked' => $this->maskEmail($normalizedEmail),
+            ];
+        }
+        return [
+            'channel' => 'none',
+            'destination' => '',
+            'masked' => 'not configured',
+        ];
+    }
+
+    private function maskPhone(string $phone): string
+    {
+        $digits = preg_replace('/\D+/', '', $phone);
+        if (!is_string($digits) || strlen($digits) < 4) {
+            return $phone;
+        }
+        $tail = substr($digits, -4);
+        return '***-***-' . $tail;
     }
 }

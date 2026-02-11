@@ -58,6 +58,15 @@ if (!defined('MYSQL_USERNAME')) {
 if (!defined('MYSQL_PASSWORD')) {
     define('MYSQL_PASSWORD', '');
 }
+if (!defined('TWILIO_ACCOUNT_SID')) {
+    define('TWILIO_ACCOUNT_SID', '');
+}
+if (!defined('TWILIO_AUTH_TOKEN')) {
+    define('TWILIO_AUTH_TOKEN', '');
+}
+if (!defined('TWILIO_FROM_NUMBER')) {
+    define('TWILIO_FROM_NUMBER', '');
+}
 const VERYFI_ENDPOINT = 'https://api.veryfi.com/api/v8/partner/documents';
 const VERYFI_MONTHLY_LIMIT = 100;
 const VERYFI_USAGE_FILE = DATA_DIR . '/veryfi-usage.json';
@@ -107,6 +116,7 @@ function save_password_record(array $data): bool
     $payload = [
         'hash' => isset($data['hash']) ? (string) $data['hash'] : '',
         'forgot_email' => isset($data['forgot_email']) ? strtolower(trim((string) $data['forgot_email'])) : '',
+        'forgot_phone' => isset($data['forgot_phone']) ? trim((string) $data['forgot_phone']) : '',
     ];
     return file_put_contents(PASSWORD_FILE, json_encode($payload, JSON_PRETTY_PRINT), LOCK_EX) !== false;
 }
@@ -140,6 +150,22 @@ function set_forgot_password_email(string $email): bool
 {
     $data = load_password_record();
     $data['forgot_email'] = strtolower(trim($email));
+    return save_password_record($data);
+}
+
+function get_forgot_password_phone(): string
+{
+    $data = load_password_record();
+    if (!empty($data['forgot_phone'])) {
+        return trim((string) $data['forgot_phone']);
+    }
+    return '';
+}
+
+function set_forgot_password_phone(string $phone): bool
+{
+    $data = load_password_record();
+    $data['forgot_phone'] = trim($phone);
     return save_password_record($data);
 }
 

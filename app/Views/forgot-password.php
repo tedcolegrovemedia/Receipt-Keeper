@@ -101,8 +101,8 @@
     <form class="card" method="post" action="">
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
       <h1>Reset password</h1>
-      <p>Send a 4-digit code to your configured recovery email, verify it, then set a new password.</p>
-      <p>Recovery email on file: <strong><?php echo htmlspecialchars($maskedEmail ?? 'not configured', ENT_QUOTES, 'UTF-8'); ?></strong></p>
+      <p>Send a 4-digit code to your configured recovery destination, verify it, then set a new password.</p>
+      <p><?php echo htmlspecialchars($deliveryLabel ?? 'Recovery destination', ENT_QUOTES, 'UTF-8'); ?> on file: <strong><?php echo htmlspecialchars($maskedDestination ?? 'not configured', ENT_QUOTES, 'UTF-8'); ?></strong></p>
 
       <?php if (!empty($error)): ?>
       <div class="error"><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></div>

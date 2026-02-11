@@ -200,7 +200,15 @@
             type="text"
             name="forgot_email"
             value="<?php echo htmlspecialchars($values['forgot_email'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-            required
+          />
+        </label>
+        <label>
+          Recovery phone for SMS (optional, E.164 format)
+          <input
+            type="text"
+            name="forgot_phone"
+            value="<?php echo htmlspecialchars($values['forgot_phone'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+            placeholder="+15551234567"
           />
         </label>
         <label>
