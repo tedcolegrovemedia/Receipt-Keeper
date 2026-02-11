@@ -274,22 +274,14 @@ class AuthController
 
     private function sendRecoveryCodeEmail(string $email, string $code): bool
     {
-        if (!function_exists('mail')) {
-            return false;
-        }
-        $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
-        $host = preg_replace('/:\d+$/', '', $host);
-        $host = preg_replace('/^www\./i', '', $host);
-        if (!is_string($host) || trim($host) === '') {
-            $host = 'localhost.localdomain';
-        }
         $subject = 'Receipt Keeper password reset code';
         $body = "Your Receipt Keeper password reset code is: {$code}\n\nThis code expires in 10 minutes.\nIf you did not request this reset, ignore this email.\n";
-        $headers = [
-            'From: Receipt Keeper <noreply@' . $host . '>',
-            'Content-Type: text/plain; charset=UTF-8',
-        ];
-        return @mail($email, $subject, $body, implode("\r\n", $headers));
+        $error = '';
+        $ok = app_mail_send($email, $subject, $body, $error);
+        if (!$ok && $error !== '') {
+            error_log('Recovery email send failed: ' . $error);
+        }
+        return $ok;
     }
 
     private function sendRecoveryCodeSms(string $phone, string $code): bool

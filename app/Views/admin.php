@@ -97,6 +97,102 @@
 
           <form class="admin-tool" method="post" action="">
             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
+            <input type="hidden" name="admin_action" value="update_mail_settings" />
+            <h3>Mail Server Settings</h3>
+            <p>Choose transport and SMTP settings used for recovery and test emails.</p>
+
+            <label>
+              Mail transport
+              <select name="mail_transport" id="mailTransportSelect">
+                <option value="mail" <?php echo (($mailTransportValue ?? 'mail') === 'mail') ? 'selected' : ''; ?>>PHP mail()</option>
+                <option value="smtp" <?php echo (($mailTransportValue ?? 'mail') === 'smtp') ? 'selected' : ''; ?>>SMTP</option>
+              </select>
+            </label>
+            <label>
+              From email
+              <input
+                type="email"
+                name="mail_from_email"
+                placeholder="noreply@yourdomain.com"
+                value="<?php echo htmlspecialchars((string) ($mailFromEmailValue ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+              />
+            </label>
+            <label>
+              From name
+              <input
+                type="text"
+                name="mail_from_name"
+                placeholder="Receipt Keeper"
+                value="<?php echo htmlspecialchars((string) ($mailFromNameValue ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+              />
+            </label>
+
+            <div id="smtpSettingsBlock">
+              <label>
+                SMTP host
+                <input
+                  type="text"
+                  name="smtp_host"
+                  placeholder="smtp.example.com"
+                  value="<?php echo htmlspecialchars((string) ($smtpHostValue ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                />
+              </label>
+              <label>
+                SMTP port
+                <input
+                  type="number"
+                  name="smtp_port"
+                  min="1"
+                  max="65535"
+                  value="<?php echo htmlspecialchars((string) ($smtpPortValue ?? '587'), ENT_QUOTES, 'UTF-8'); ?>"
+                />
+              </label>
+              <label>
+                SMTP encryption
+                <select name="smtp_encryption">
+                  <option value="tls" <?php echo (($smtpEncryptionValue ?? 'tls') === 'tls') ? 'selected' : ''; ?>>TLS (STARTTLS)</option>
+                  <option value="ssl" <?php echo (($smtpEncryptionValue ?? 'tls') === 'ssl') ? 'selected' : ''; ?>>SSL</option>
+                  <option value="none" <?php echo (($smtpEncryptionValue ?? 'tls') === 'none') ? 'selected' : ''; ?>>None</option>
+                </select>
+              </label>
+              <label>
+                SMTP username
+                <input
+                  type="text"
+                  name="smtp_username"
+                  placeholder="username"
+                  value="<?php echo htmlspecialchars((string) ($smtpUsernameValue ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                />
+              </label>
+              <label>
+                SMTP password
+                <input
+                  type="password"
+                  name="smtp_password"
+                  placeholder="Leave blank to keep current"
+                />
+              </label>
+              <label class="admin-checkbox">
+                <input type="checkbox" name="smtp_password_clear" value="1" />
+                Clear saved SMTP password
+              </label>
+              <label>
+                SMTP timeout (seconds)
+                <input
+                  type="number"
+                  name="smtp_timeout"
+                  min="5"
+                  max="120"
+                  value="<?php echo htmlspecialchars((string) ($smtpTimeoutValue ?? '20'), ENT_QUOTES, 'UTF-8'); ?>"
+                />
+              </label>
+            </div>
+
+            <button class="btn primary" type="submit">Save Mail Settings</button>
+          </form>
+
+          <form class="admin-tool" method="post" action="">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
             <input type="hidden" name="admin_action" value="export_bundle" />
             <h3>Full Export</h3>
             <p>Download a full backup zip with receipts JSON, receipts CSV, and uploaded receipt files.</p>
@@ -235,5 +331,17 @@
       </section>
     </main>
     <script src="<?php echo htmlspecialchars(asset_path('assets/theme.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+    <script>
+      (function () {
+        const select = document.getElementById("mailTransportSelect");
+        const block = document.getElementById("smtpSettingsBlock");
+        if (!select || !block) return;
+        const update = () => {
+          block.hidden = select.value !== "smtp";
+        };
+        select.addEventListener("change", update);
+        update();
+      })();
+    </script>
   </body>
 </html>

@@ -32,12 +32,15 @@ class AdminController
             'Configured Base Path Override' => $this->configuredBasePathLabel(),
             'Configured Storage Mode' => strtoupper(storage_mode()),
             'Active Storage Driver' => strtoupper(storage_driver()),
+            'Mail Transport' => strtoupper(app_mail_transport()),
+            'Mail From' => app_mail_from_email(),
             'Default OCR' => $this->defaultOcrProvider(),
             'Veryfi OCR Remaining' => $this->veryfiRemainingLabel(),
         ];
 
         $ocrRemaining = $usage['remaining'];
         $ocrLimit = (int) ($usage['limit'] ?? 0);
+        $smtpSettings = app_mail_smtp_settings();
 
         render('admin', [
             'checks' => $checks,
@@ -49,6 +52,14 @@ class AdminController
             'ocrLimit' => $ocrLimit,
             'appBasePathValue' => defined('APP_BASE_PATH') ? (string) APP_BASE_PATH : '',
             'defaultTestEmail' => get_forgot_password_email(),
+            'mailTransportValue' => app_mail_transport(),
+            'mailFromEmailValue' => (string) MAIL_FROM_EMAIL,
+            'mailFromNameValue' => (string) MAIL_FROM_NAME,
+            'smtpHostValue' => (string) ($smtpSettings['host'] ?? ''),
+            'smtpPortValue' => (string) ($smtpSettings['port'] ?? 587),
+            'smtpEncryptionValue' => (string) ($smtpSettings['encryption'] ?? 'tls'),
+            'smtpUsernameValue' => (string) ($smtpSettings['username'] ?? ''),
+            'smtpTimeoutValue' => (string) ($smtpSettings['timeout'] ?? 20),
         ]);
     }
 
@@ -66,6 +77,8 @@ class AdminController
         switch ($action) {
             case 'update_ocr_remaining':
                 return $this->handleUpdateOcrRemaining();
+            case 'update_mail_settings':
+                return $this->handleUpdateMailSettings();
             case 'update_recovery_email':
                 return $this->handleUpdateRecoveryEmail();
             case 'test_email':
@@ -116,6 +129,66 @@ class AdminController
         return ["Base path saved as {$label}. Refresh the page to apply.", ''];
     }
 
+    private function handleUpdateMailSettings(): array
+    {
+        $transport = strtolower(trim((string) ($_POST['mail_transport'] ?? 'mail')));
+        if (!in_array($transport, ['mail', 'smtp'], true)) {
+            $transport = 'mail';
+        }
+
+        $fromEmail = strtolower(trim((string) ($_POST['mail_from_email'] ?? '')));
+        $fromName = trim((string) ($_POST['mail_from_name'] ?? 'Receipt Keeper'));
+        $smtpHost = trim((string) ($_POST['smtp_host'] ?? ''));
+        $smtpPort = (int) ($_POST['smtp_port'] ?? 587);
+        $smtpEncryption = strtolower(trim((string) ($_POST['smtp_encryption'] ?? 'tls')));
+        $smtpUsername = trim((string) ($_POST['smtp_username'] ?? ''));
+        $smtpPassword = (string) ($_POST['smtp_password'] ?? '');
+        $smtpTimeout = (int) ($_POST['smtp_timeout'] ?? 20);
+        $clearPassword = !empty($_POST['smtp_password_clear']);
+
+        if ($fromName === '') {
+            $fromName = 'Receipt Keeper';
+        }
+        if ($fromEmail !== '' && !filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
+            return ['', 'Mail from email must be a valid email address.'];
+        }
+        if (!in_array($smtpEncryption, ['none', 'tls', 'ssl'], true)) {
+            return ['', 'SMTP encryption must be one of: none, tls, ssl.'];
+        }
+        if ($smtpPort <= 0 || $smtpPort > 65535) {
+            return ['', 'SMTP port must be between 1 and 65535.'];
+        }
+        if ($smtpTimeout < 5 || $smtpTimeout > 120) {
+            return ['', 'SMTP timeout must be between 5 and 120 seconds.'];
+        }
+        if ($transport === 'smtp' && $smtpHost === '') {
+            return ['', 'SMTP host is required when mail transport is SMTP.'];
+        }
+        if ($transport === 'smtp' && $fromEmail === '') {
+            return ['', 'Mail from email is required when mail transport is SMTP.'];
+        }
+
+        $saved =
+            $this->upsertLocalConfigDefine('MAIL_TRANSPORT', $transport)
+            && $this->upsertLocalConfigDefine('MAIL_FROM_EMAIL', $fromEmail)
+            && $this->upsertLocalConfigDefine('MAIL_FROM_NAME', $fromName)
+            && $this->upsertLocalConfigDefine('SMTP_HOST', $smtpHost)
+            && $this->upsertLocalConfigDefine('SMTP_PORT', $smtpPort)
+            && $this->upsertLocalConfigDefine('SMTP_ENCRYPTION', $smtpEncryption)
+            && $this->upsertLocalConfigDefine('SMTP_USERNAME', $smtpUsername)
+            && $this->upsertLocalConfigDefine('SMTP_TIMEOUT', $smtpTimeout);
+
+        if ($saved && ($smtpPassword !== '' || $clearPassword)) {
+            $saved = $this->upsertLocalConfigDefine('SMTP_PASSWORD', $clearPassword ? '' : $smtpPassword);
+        }
+
+        if (!$saved) {
+            return ['', 'Failed to save mail settings to config/config.local.php. Check file permissions.'];
+        }
+
+        return ['Mail settings saved. Refresh the page to apply all changes.', ''];
+    }
+
     private function handleUpdateRecoveryEmail(): array
     {
         $email = strtolower(trim((string) ($_POST['recovery_email'] ?? '')));
@@ -145,13 +218,11 @@ class AdminController
         if (!filter_var($destination, FILTER_VALIDATE_EMAIL)) {
             return ['', 'Test email must be a valid email address.'];
         }
-        if (!function_exists('mail')) {
-            return ['', 'PHP mail() is not available on this server.'];
-        }
-
-        $ok = $this->sendAdminTestEmail($destination);
+        $error = '';
+        $ok = $this->sendAdminTestEmail($destination, $error);
         if (!$ok) {
-            return ['', 'Mail send failed. Check sendmail/SMTP configuration on this server.'];
+            $detail = $error !== '' ? ' Details: ' . $error : '';
+            return ['', 'Mail send failed.' . $detail];
         }
 
         return ['Test email sent to ' . $destination . '.', ''];
@@ -523,26 +594,18 @@ class AdminController
         return '$' . number_format($value, 2, '.', '');
     }
 
-    private function sendAdminTestEmail(string $destination): bool
+    private function sendAdminTestEmail(string $destination, ?string &$error = null): bool
     {
-        $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
-        $host = preg_replace('/:\d+$/', '', $host);
-        $host = preg_replace('/^www\./i', '', $host);
-        if (!is_string($host) || trim($host) === '') {
-            $host = 'localhost.localdomain';
+        $host = normalize_host_for_csrf((string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+        if ($host === '') {
+            $host = 'localhost';
         }
-
         $subject = 'Receipt Keeper email test';
         $body = "This is a test email from Receipt Keeper admin.\n\nSent at: " . gmdate('c') . "\nHost: {$host}\n";
-        $headers = [
-            'From: Receipt Keeper <noreply@' . $host . '>',
-            'Content-Type: text/plain; charset=UTF-8',
-        ];
-
-        return @mail($destination, $subject, $body, implode("\r\n", $headers));
+        return app_mail_send($destination, $subject, $body, $error);
     }
 
-    private function upsertLocalConfigDefine(string $name, string $value): bool
+    private function upsertLocalConfigDefine(string $name, $value): bool
     {
         $line = "define('" . $name . "', " . var_export($value, true) . ');';
         $path = LOCAL_CONFIG_FILE;
@@ -696,6 +759,24 @@ class AdminController
             $zipAvailable ? 'ZipArchive is available.' : 'ZipArchive extension missing.'
         );
 
+        $mailTransport = app_mail_transport();
+        $smtp = app_mail_smtp_settings();
+        $mailSettingsOk = true;
+        $mailSettingsDetail = strtoupper($mailTransport);
+        if ($mailTransport === 'smtp') {
+            $mailSettingsDetail = 'SMTP ' . $smtp['host'] . ':' . $smtp['port'] . ' (' . strtoupper((string) $smtp['encryption']) . ')';
+            if ((string) $smtp['host'] === '') {
+                $mailSettingsOk = false;
+                $mailSettingsDetail = 'SMTP selected but host is empty.';
+            }
+        }
+        $checks[] = $this->makeCheck(
+            'Mail transport settings',
+            $mailTransport === 'smtp',
+            $mailSettingsOk,
+            $mailSettingsDetail
+        );
+
         $curlAvailable = function_exists('curl_init');
         $checks[] = $this->makeCheck(
             'cURL extension available',
@@ -716,12 +797,15 @@ class AdminController
             $pdfJsAvailable,
             $pdfJsAvailable ? 'PDF text extraction files are present.' : 'Missing PDF.js files in public/vendor/pdfjs.'
         );
-        $mailAvailable = function_exists('mail');
+        $mailAvailable = $mailTransport === 'smtp' ? function_exists('stream_socket_client') : function_exists('mail');
+        $mailDetail = $mailTransport === 'smtp'
+            ? ($mailAvailable ? 'SMTP socket functions are available.' : 'stream_socket_client() is unavailable for SMTP.')
+            : ($mailAvailable ? 'mail() function is available.' : 'mail() function unavailable.');
         $checks[] = $this->makeCheck(
-            'PHP mail() available',
+            'Mail transport runtime support',
             false,
             $mailAvailable,
-            $mailAvailable ? 'mail() function is available.' : 'mail() function unavailable.'
+            $mailDetail
         );
         $twilioConfigured = $this->twilioConfigured();
         $checks[] = $this->makeCheck(

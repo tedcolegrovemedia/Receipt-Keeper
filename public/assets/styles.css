@@ -661,6 +661,7 @@ input[type="text"],
 input[type="email"],
 input[type="date"],
 input[type="number"],
+input[type="password"],
 input[type="search"],
 select:not(.year-select) {
   border-radius: 12px;
@@ -908,6 +909,11 @@ body.dark .admin-flash-error {
 
 .admin-tool .btn {
   justify-self: start;
+}
+
+.admin-tool #smtpSettingsBlock {
+  display: grid;
+  gap: 10px;
 }
 
 .admin-checkbox {
