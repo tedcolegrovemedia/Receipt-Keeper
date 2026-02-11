@@ -1111,27 +1111,35 @@ body.dark .admin-flash-error {
 @media (max-width: 720px) {
   .app {
     width: 100%;
-    padding: calc(16px + env(safe-area-inset-top, 0px)) 12px
+    max-width: 430px;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 10px
       calc(28px + env(safe-area-inset-bottom, 0px));
+    gap: 18px;
   }
 
   .top-nav,
   .hero,
-  .panel {
-    width: 100%;
+  .panel,
+  .site-footer {
+    width: min(100%, 410px);
     margin-inline: auto;
   }
 
   .panel {
-    padding: 20px;
+    padding: 14px;
+  }
+
+  .hero {
+    gap: 14px;
   }
 
   .hero-card {
     width: 100%;
+    padding: 14px;
   }
 
   .top-nav {
-    padding: 16px;
+    padding: 12px;
   }
 
   .nav-actions {
