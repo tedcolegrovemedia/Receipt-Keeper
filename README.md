@@ -10,7 +10,7 @@ It supports:
 - required fields for category and business purpose
 - edit/delete + bulk delete
 - year filters, pagination, and CSV export
-- diagnostics/admin tools (mail, OCR quota, import/export, base path)
+- diagnostics/admin tools (OCR quota, import/export, base path)
 
 ---
 
@@ -54,8 +54,6 @@ It supports:
   - Login username editor.
   - OCR remaining counter editor (Veryfi quota).
   - Reset PIN editor for forgot-password flow.
-  - Mail transport settings (`mail()` or SMTP).
-  - Test email sender.
   - Full backup export ZIP.
   - Backup import ZIP.
   - Base path override for subfolder deployments.
@@ -307,10 +305,9 @@ Also ensure:
 `/admin` includes:
 - install/runtime checks
 - storage diagnostics and connectivity probes
+- login username editor
 - OCR remaining counter editor
 - reset PIN editor
-- mail transport config (`mail()` / SMTP)
-- email test sender
 - full export ZIP generator
 - import ZIP restore
 - base path updater
