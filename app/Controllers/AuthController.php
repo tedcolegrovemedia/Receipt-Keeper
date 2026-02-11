@@ -67,9 +67,7 @@ class AuthController
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $action = (string) ($_POST['action'] ?? '');
 
-            if (!verify_csrf_token($_POST['csrf_token'] ?? null)) {
-                $error = 'Session expired. Please refresh and try again.';
-            } elseif ($configuredEmail === '') {
+            if ($configuredEmail === '') {
                 $error = 'Recovery email is not configured. Use your existing password to sign in and set one.';
             } else {
                 if ($action === 'send_code') {
