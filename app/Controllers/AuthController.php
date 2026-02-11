@@ -27,7 +27,7 @@ class AuthController
                 // Password file not configured yet.
             } elseif ($rateStatus['blocked']) {
                 // Do not process while rate limited.
-            } elseif (!verify_csrf_token($_POST['csrf_token'] ?? null)) {
+            } elseif (!verify_csrf_or_same_origin($_POST['csrf_token'] ?? null)) {
                 $error = 'Session expired. Please refresh and try again.';
             } else {
                 $username = trim($_POST['username'] ?? '');
@@ -201,7 +201,7 @@ class AuthController
         }
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
-            if (!verify_csrf_token($_POST['csrf_token'] ?? null)) {
+            if (!verify_csrf_or_same_origin($_POST['csrf_token'] ?? null)) {
                 $error = 'Session expired. Please refresh and try again.';
             } else {
                 $current = $_POST['current_password'] ?? '';

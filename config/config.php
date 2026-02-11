@@ -273,6 +273,62 @@ function verify_csrf_token(?string $token): bool
     return hash_equals($_SESSION['csrf_token'], $token);
 }
 
+function normalize_host_for_csrf(string $host): string
+{
+    $host = strtolower(trim($host));
+    $host = preg_replace('/:\d+$/', '', $host);
+    if (!is_string($host) || $host === '') {
+        return '';
+    }
+    if (strpos($host, 'www.') === 0) {
+        $host = substr($host, 4);
+    }
+    return $host;
+}
+
+function request_looks_same_origin(): bool
+{
+    if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? '')) !== 'POST') {
+        return false;
+    }
+
+    $host = normalize_host_for_csrf((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    if ($host === '') {
+        return false;
+    }
+
+    $origin = trim((string) ($_SERVER['HTTP_ORIGIN'] ?? ''));
+    if ($origin !== '') {
+        $originHost = normalize_host_for_csrf((string) parse_url($origin, PHP_URL_HOST));
+        if ($originHost !== '' && $originHost === $host) {
+            return true;
+        }
+    }
+
+    $referer = trim((string) ($_SERVER['HTTP_REFERER'] ?? ''));
+    if ($referer !== '') {
+        $refererHost = normalize_host_for_csrf((string) parse_url($referer, PHP_URL_HOST));
+        if ($refererHost !== '' && $refererHost === $host) {
+            return true;
+        }
+    }
+
+    $fetchSite = strtolower(trim((string) ($_SERVER['HTTP_SEC_FETCH_SITE'] ?? '')));
+    if (in_array($fetchSite, ['same-origin', 'same-site'], true)) {
+        return true;
+    }
+
+    return false;
+}
+
+function verify_csrf_or_same_origin(?string $token): bool
+{
+    if (verify_csrf_token($token)) {
+        return true;
+    }
+    return request_looks_same_origin();
+}
+
 function sqlite_available(): bool
 {
     if (!class_exists('PDO')) {

@@ -51,7 +51,7 @@ class InstallController
                 $values['storage_mode'] = $defaultMode;
             }
 
-            if (!verify_csrf_token($_POST['csrf_token'] ?? null)) {
+            if (!verify_csrf_or_same_origin($_POST['csrf_token'] ?? null)) {
                 $error = 'Session expired. Please refresh and try again.';
             } elseif (!data_store_available()) {
                 $error = 'Data folder is not writable. Ensure the data/ folder is writable by the server.';
