@@ -15,7 +15,7 @@ class InstallController
             'mysql' => mysql_available(),
         ];
         $defaultMode = $availability['sqlite'] ? 'sqlite' : 'json';
-        $defaultRecoveryEmail = get_forgot_password_email() !== '' ? get_forgot_password_email() : 'primerx24@gmail.com';
+        $defaultRecoveryEmail = get_forgot_password_email();
         $values = [
             'storage_mode' => $defaultMode,
             'forgot_email' => $defaultRecoveryEmail,
