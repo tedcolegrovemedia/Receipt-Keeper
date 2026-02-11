@@ -66,6 +66,8 @@ class AdminController
         switch ($action) {
             case 'update_ocr_remaining':
                 return $this->handleUpdateOcrRemaining();
+            case 'update_recovery_email':
+                return $this->handleUpdateRecoveryEmail();
             case 'test_email':
                 return $this->handleTestEmail();
             case 'export_bundle':
@@ -112,6 +114,22 @@ class AdminController
 
         $label = $normalized === '' ? 'auto-detect' : $normalized;
         return ["Base path saved as {$label}. Refresh the page to apply.", ''];
+    }
+
+    private function handleUpdateRecoveryEmail(): array
+    {
+        $email = strtolower(trim((string) ($_POST['recovery_email'] ?? '')));
+        if ($email === '') {
+            return ['', 'Recovery email is required.'];
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return ['', 'Recovery email must be a valid email address.'];
+        }
+        if (!set_forgot_password_email($email)) {
+            return ['', 'Could not save recovery email. Check data folder permissions.'];
+        }
+
+        return ['Recovery email updated to ' . $email . '.', ''];
     }
 
     private function handleTestEmail(): array

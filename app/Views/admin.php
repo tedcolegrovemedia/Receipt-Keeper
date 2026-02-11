@@ -105,6 +105,24 @@
 
           <form class="admin-tool" method="post" action="">
             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
+            <input type="hidden" name="admin_action" value="update_recovery_email" />
+            <h3>Recovery Email</h3>
+            <p>Update the email used for forgot-password recovery codes.</p>
+            <label>
+              Recovery email
+              <input
+                type="email"
+                name="recovery_email"
+                placeholder="name@example.com"
+                value="<?php echo htmlspecialchars((string) ($defaultTestEmail ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                required
+              />
+            </label>
+            <button class="btn primary" type="submit">Save Recovery Email</button>
+          </form>
+
+          <form class="admin-tool" method="post" action="">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
             <input type="hidden" name="admin_action" value="test_email" />
             <h3>Email Test</h3>
             <p>Send a test email to verify server mail delivery.</p>
