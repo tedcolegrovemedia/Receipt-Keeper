@@ -54,8 +54,8 @@ It supports:
   - Storage checks (JSON/SQLite/MySQL).
   - Login username editor.
   - OCR remaining counter editor (Veryfi quota).
-  - Backup export ZIP for all years or a selected year.
-  - Backup import ZIP.
+  - Backup export archive for all years or a selected year.
+  - Backup import archive.
   - Base path override for subfolder deployments.
 
 - UI:
@@ -131,7 +131,8 @@ Optional PHP extensions by feature:
 - `pdo_sqlite` for SQLite storage
 - `pdo_mysql` for MySQL storage
 - `curl` for Veryfi OCR
-- `zip` (`ZipArchive`) for full backup export/import
+- `zip` (`ZipArchive`) for ZIP export/import (preferred)
+- `phar` (`PharData`) for TAR/TAR.GZ export/import fallback
 
 Third-party services (optional):
 - Veryfi OCR
@@ -297,11 +298,15 @@ Also ensure:
 - storage diagnostics and connectivity probes
 - login username editor
 - OCR remaining counter editor
-- export ZIP generator (all years or selected year)
-- import ZIP restore
+- export archive generator (all years or selected year)
+- import archive restore
 - base path updater
 
-Full export ZIP contains:
+Archive format behavior:
+- Uses ZIP when `ZipArchive` is available.
+- Falls back to `tar.gz` when ZIP is unavailable but `PharData` is available.
+
+Full export archive contains:
 - `receipts/receipts.json`
 - `receipts/receipts.csv`
 - `uploads/*` (only files referenced by the exported receipt scope)

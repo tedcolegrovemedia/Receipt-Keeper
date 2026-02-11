@@ -119,7 +119,7 @@
             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
             <input type="hidden" name="admin_action" value="export_bundle" />
             <h3>Full Export</h3>
-            <p>Download a backup zip for all receipts or a selected year (includes matching image/PDF files).</p>
+            <p>Download a backup archive for all receipts or a selected year (includes matching image/PDF files).</p>
             <label>
               Export scope
               <select name="export_year">
@@ -131,23 +131,23 @@
                 <?php endforeach; ?>
               </select>
             </label>
-            <button class="btn primary" type="submit">Download Export Zip</button>
+            <button class="btn primary" type="submit">Download Export Archive</button>
           </form>
 
           <form class="admin-tool" method="post" action="" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
             <input type="hidden" name="admin_action" value="import_bundle" />
-            <h3>Import Export Zip</h3>
-            <p>Restore receipts and receipt files from a previous full export.</p>
+            <h3>Import Export Archive</h3>
+            <p>Restore receipts and receipt files from a previous export archive.</p>
             <label>
-              Export zip file
-              <input type="file" name="import_bundle" accept=".zip,application/zip" required />
+              Export archive file
+              <input type="file" name="import_bundle" accept=".zip,.tar,.tgz,.tar.gz,application/zip,application/x-tar,application/gzip" required />
             </label>
             <label class="admin-checkbox">
               <input type="checkbox" name="import_replace" value="1" checked />
               Replace existing receipts and files before import
             </label>
-            <button class="btn primary" type="submit">Import Backup Zip</button>
+            <button class="btn primary" type="submit">Import Backup Archive</button>
           </form>
 
           <form class="admin-tool" method="post" action="">

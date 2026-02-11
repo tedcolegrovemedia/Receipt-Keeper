@@ -40,6 +40,7 @@ class AdminController
             'Active Storage Driver' => strtoupper(storage_driver()),
             'Default OCR' => $this->defaultOcrProvider(),
             'Veryfi OCR Remaining' => $this->veryfiRemainingLabel(),
+            'Archive Support' => $this->archiveSupportLabel(),
         ];
 
         $ocrRemaining = $usage['remaining'];
@@ -138,12 +139,8 @@ class AdminController
 
     private function handleImportBundle(): array
     {
-        if (!class_exists('ZipArchive')) {
-            return ['', 'ZipArchive extension is not available on this server.'];
-        }
-
         if (empty($_FILES['import_bundle'])) {
-            return ['', 'Choose an export zip file to import.'];
+            return ['', 'Choose an export archive file to import.'];
         }
 
         $file = $_FILES['import_bundle'];
@@ -166,7 +163,8 @@ class AdminController
         }
 
         $replaceExisting = !empty($_POST['import_replace']);
-        $result = $this->importBundle($tmpName, $replaceExisting);
+        $originalName = (string) ($file['name'] ?? '');
+        $result = $this->importBundle($tmpName, $replaceExisting, $originalName);
         if (!$result['ok']) {
             return ['', (string) $result['error']];
         }
@@ -179,7 +177,7 @@ class AdminController
 
         $parts = [];
         if (!empty($result['missingImages'])) {
-            $parts[] = (int) $result['missingImages'] . ' receipt image(s) were missing in the zip';
+            $parts[] = (int) $result['missingImages'] . ' receipt image(s) were missing in the archive';
         }
         if (!empty($result['skippedReceipts'])) {
             $parts[] = (int) $result['skippedReceipts'] . ' receipt record(s) were skipped';
@@ -198,36 +196,35 @@ class AdminController
         return [$message, ''];
     }
 
-    private function importBundle(string $zipPath, bool $replaceExisting): array
+    private function importBundle(string $archivePath, bool $replaceExisting, string $originalName = ''): array
     {
-        $zip = new ZipArchive();
-        $opened = $zip->open($zipPath);
-        if ($opened !== true) {
-            return ['ok' => false, 'error' => 'Could not open zip file.'];
+        $archive = $this->openArchiveForImport($archivePath, $originalName);
+        if (!$archive['ok']) {
+            return ['ok' => false, 'error' => (string) $archive['error']];
         }
 
-        $receiptsJson = $this->readZipEntry($zip, [
+        $receiptsJson = $this->readArchiveEntry($archive, [
             'receipts/receipts.json',
             'receipts.json',
         ]);
         if ($receiptsJson === null) {
-            $zip->close();
-            return ['ok' => false, 'error' => 'Zip does not contain receipts/receipts.json.'];
+            $this->closeArchive($archive);
+            return ['ok' => false, 'error' => 'Archive does not contain receipts/receipts.json.'];
         }
 
         $decoded = json_decode($receiptsJson, true);
         if (!is_array($decoded)) {
-            $zip->close();
-            return ['ok' => false, 'error' => 'Invalid receipts JSON in zip.'];
+            $this->closeArchive($archive);
+            return ['ok' => false, 'error' => 'Invalid receipts JSON in archive.'];
         }
 
         if ($replaceExisting) {
             if (!$this->deleteAllUploadedFiles()) {
-                $zip->close();
+                $this->closeArchive($archive);
                 return ['ok' => false, 'error' => 'Could not clear existing uploaded files.'];
             }
             if (!delete_all_receipts()) {
-                $zip->close();
+                $this->closeArchive($archive);
                 return ['ok' => false, 'error' => 'Could not clear existing receipts before import.'];
             }
         }
@@ -256,7 +253,7 @@ class AdminController
             $normalized['imageFile'] = $imageFile;
 
             if ($imageFile !== '') {
-                $imageData = $this->readZipEntry($zip, [
+                $imageData = $this->readArchiveEntry($archive, [
                     'uploads/' . $imageFile,
                     'receipts/uploads/' . $imageFile,
                 ]);
@@ -286,7 +283,7 @@ class AdminController
         }
 
         $warnings = [];
-        $vendorMemoryJson = $this->readZipEntry($zip, ['meta/vendor-memory.json', 'vendor-memory.json']);
+        $vendorMemoryJson = $this->readArchiveEntry($archive, ['meta/vendor-memory.json', 'vendor-memory.json']);
         if ($vendorMemoryJson !== null) {
             if (json_decode($vendorMemoryJson, true) !== null || trim($vendorMemoryJson) === '[]' || trim($vendorMemoryJson) === '{}') {
                 if (file_put_contents(VENDOR_MEMORY_FILE, $vendorMemoryJson, LOCK_EX) === false) {
@@ -295,7 +292,7 @@ class AdminController
             }
         }
 
-        $veryfiUsageJson = $this->readZipEntry($zip, ['meta/veryfi-usage.json', 'veryfi-usage.json']);
+        $veryfiUsageJson = $this->readArchiveEntry($archive, ['meta/veryfi-usage.json', 'veryfi-usage.json']);
         if ($veryfiUsageJson !== null) {
             if (json_decode($veryfiUsageJson, true) !== null || trim($veryfiUsageJson) === '[]' || trim($veryfiUsageJson) === '{}') {
                 if (file_put_contents(VERYFI_USAGE_FILE, $veryfiUsageJson, LOCK_EX) === false) {
@@ -304,7 +301,7 @@ class AdminController
             }
         }
 
-        $zip->close();
+        $this->closeArchive($archive);
 
         return [
             'ok' => true,
@@ -365,40 +362,97 @@ class AdminController
         return $basename . '.' . $ext;
     }
 
-    private function readZipEntry(ZipArchive $zip, array $names): ?string
+    private function openArchiveForImport(string $path, string $originalName = ''): array
     {
+        $name = strtolower(trim($originalName));
+        if ($name === '') {
+            $name = strtolower(basename($path));
+        }
+        $preferTar = preg_match('/\.(tar\.gz|tgz|tar)$/', $name) === 1;
+
+        if (!$preferTar && class_exists('ZipArchive')) {
+            $zip = new ZipArchive();
+            $opened = $zip->open($path);
+            if ($opened === true) {
+                return ['ok' => true, 'type' => 'zip', 'archive' => $zip];
+            }
+        }
+
+        if (class_exists('PharData')) {
+            try {
+                $phar = new PharData($path);
+                return ['ok' => true, 'type' => 'tar', 'archive' => $phar];
+            } catch (Throwable $error) {
+                if ($preferTar) {
+                    return ['ok' => false, 'error' => 'Could not open tar archive: ' . $error->getMessage()];
+                }
+            }
+        }
+
+        if ($preferTar || !class_exists('ZipArchive')) {
+            $missing = class_exists('PharData') ? 'Archive failed to open.' : 'ZipArchive and PharData are not available.';
+            return ['ok' => false, 'error' => $missing];
+        }
+
+        return ['ok' => false, 'error' => 'Could not open zip archive.'];
+    }
+
+    private function readArchiveEntry(array $archive, array $names): ?string
+    {
+        $type = (string) ($archive['type'] ?? '');
+        $handle = $archive['archive'] ?? null;
+
         foreach ($names as $name) {
-            $content = $zip->getFromName($name);
-            if ($content !== false) {
-                return $content;
+            $entry = ltrim(str_replace('\\', '/', (string) $name), '/');
+            if ($entry === '') {
+                continue;
+            }
+
+            if ($type === 'zip' && $handle instanceof ZipArchive) {
+                $content = $handle->getFromName($entry);
+                if ($content !== false) {
+                    return $content;
+                }
+                continue;
+            }
+
+            if ($type === 'tar' && $handle instanceof PharData) {
+                if (!isset($handle[$entry])) {
+                    continue;
+                }
+                $file = $handle[$entry];
+                if ($file instanceof PharFileInfo) {
+                    $content = $file->getContent();
+                    if (is_string($content)) {
+                        return $content;
+                    }
+                }
             }
         }
         return null;
     }
 
+    private function closeArchive(array $archive): void
+    {
+        if (($archive['type'] ?? '') === 'zip' && ($archive['archive'] ?? null) instanceof ZipArchive) {
+            $archive['archive']->close();
+        }
+    }
+
     private function downloadExportBundle(string $requestedYear = 'all'): void
     {
-        if (!class_exists('ZipArchive')) {
+        if (!class_exists('ZipArchive') && !class_exists('PharData')) {
             render('admin', [
                 'checks' => $this->buildChecks(),
                 'summary' => ['pass' => 0, 'warning' => 0, 'fail' => 0],
                 'runtime' => [],
-                'error' => 'ZipArchive extension is not available on this server.',
+                'error' => 'No archive extension available (ZipArchive or PharData).',
                 'success' => '',
                 'ocrRemainingValue' => '',
                 'ocrLimit' => (int) VERYFI_MONTHLY_LIMIT,
                 'appBasePathValue' => defined('APP_BASE_PATH') ? (string) APP_BASE_PATH : '',
                 'exportYears' => $this->extractReceiptYears(fetch_all_receipts()),
             ]);
-        }
-
-        $tmpFile = tempnam(sys_get_temp_dir(), 'rkexp_');
-        if ($tmpFile === false) {
-            throw new RuntimeException('Could not allocate temporary file for export.');
-        }
-        $zipPath = $tmpFile . '.zip';
-        if (!@rename($tmpFile, $zipPath)) {
-            $zipPath = $tmpFile;
         }
 
         $allReceipts = fetch_all_receipts();
@@ -411,11 +465,6 @@ class AdminController
                 }
                 return $this->extractReceiptYear($receipt) === $scope;
             }));
-        $zip = new ZipArchive();
-        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-            @unlink($zipPath);
-            throw new RuntimeException('Could not create export zip.');
-        }
 
         $manifest = [
             'format' => 'receipt-keeper-export',
@@ -426,22 +475,6 @@ class AdminController
             'receiptCount' => count($receipts),
             'scopeYear' => $scope,
         ];
-        $zip->addFromString('manifest.json', json_encode($manifest, JSON_PRETTY_PRINT));
-        $zip->addFromString('receipts/receipts.json', json_encode($receipts, JSON_PRETTY_PRINT));
-        $zip->addFromString('receipts/receipts.csv', $this->buildReceiptsCsv($receipts));
-
-        if (is_file(VENDOR_MEMORY_FILE)) {
-            $content = file_get_contents(VENDOR_MEMORY_FILE);
-            if ($content !== false) {
-                $zip->addFromString('meta/vendor-memory.json', $content);
-            }
-        }
-        if (is_file(VERYFI_USAGE_FILE)) {
-            $content = file_get_contents(VERYFI_USAGE_FILE);
-            if ($content !== false) {
-                $zip->addFromString('meta/veryfi-usage.json', $content);
-            }
-        }
 
         $exportFiles = [];
         foreach ($receipts as $receipt) {
@@ -458,23 +491,107 @@ class AdminController
             }
             $exportFiles[$safeFile] = true;
         }
-        foreach (array_keys($exportFiles) as $file) {
-            $path = UPLOADS_DIR . '/' . $file;
-            if (is_file($path)) {
-                $zip->addFile($path, 'uploads/' . $file);
-            }
-        }
-
-        $zip->close();
 
         $suffix = $scope === 'all' ? 'all' : $scope;
-        $downloadName = 'receipt-keeper-export-' . $suffix . '-' . gmdate('Ymd-His') . '.zip';
-        header('Content-Type: application/zip');
+
+        if (class_exists('ZipArchive')) {
+            $tmpFile = tempnam(sys_get_temp_dir(), 'rkexp_');
+            if ($tmpFile === false) {
+                throw new RuntimeException('Could not allocate temporary file for export.');
+            }
+            $zipPath = $tmpFile . '.zip';
+            if (!@rename($tmpFile, $zipPath)) {
+                $zipPath = $tmpFile;
+            }
+
+            $zip = new ZipArchive();
+            if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+                @unlink($zipPath);
+                throw new RuntimeException('Could not create export zip.');
+            }
+
+            $zip->addFromString('manifest.json', json_encode($manifest, JSON_PRETTY_PRINT));
+            $zip->addFromString('receipts/receipts.json', json_encode($receipts, JSON_PRETTY_PRINT));
+            $zip->addFromString('receipts/receipts.csv', $this->buildReceiptsCsv($receipts));
+            if (is_file(VENDOR_MEMORY_FILE)) {
+                $content = file_get_contents(VENDOR_MEMORY_FILE);
+                if ($content !== false) {
+                    $zip->addFromString('meta/vendor-memory.json', $content);
+                }
+            }
+            if (is_file(VERYFI_USAGE_FILE)) {
+                $content = file_get_contents(VERYFI_USAGE_FILE);
+                if ($content !== false) {
+                    $zip->addFromString('meta/veryfi-usage.json', $content);
+                }
+            }
+            foreach (array_keys($exportFiles) as $file) {
+                $path = UPLOADS_DIR . '/' . $file;
+                if (is_file($path)) {
+                    $zip->addFile($path, 'uploads/' . $file);
+                }
+            }
+
+            $zip->close();
+
+            $downloadName = 'receipt-keeper-export-' . $suffix . '-' . gmdate('Ymd-His') . '.zip';
+            header('Content-Type: application/zip');
+            header('Content-Disposition: attachment; filename="' . $downloadName . '"');
+            header('Content-Length: ' . (string) filesize($zipPath));
+            header('Cache-Control: no-store, max-age=0');
+            readfile($zipPath);
+            @unlink($zipPath);
+            exit;
+        }
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'rkexp_');
+        if ($tmpFile === false) {
+            throw new RuntimeException('Could not allocate temporary file for export.');
+        }
+        $tarPath = $tmpFile . '.tar';
+        if (!@rename($tmpFile, $tarPath)) {
+            $tarPath = $tmpFile;
+        }
+
+        try {
+            $tar = new PharData($tarPath);
+            $tar->addFromString('manifest.json', json_encode($manifest, JSON_PRETTY_PRINT));
+            $tar->addFromString('receipts/receipts.json', json_encode($receipts, JSON_PRETTY_PRINT));
+            $tar->addFromString('receipts/receipts.csv', $this->buildReceiptsCsv($receipts));
+            if (is_file(VENDOR_MEMORY_FILE)) {
+                $content = file_get_contents(VENDOR_MEMORY_FILE);
+                if ($content !== false) {
+                    $tar->addFromString('meta/vendor-memory.json', $content);
+                }
+            }
+            if (is_file(VERYFI_USAGE_FILE)) {
+                $content = file_get_contents(VERYFI_USAGE_FILE);
+                if ($content !== false) {
+                    $tar->addFromString('meta/veryfi-usage.json', $content);
+                }
+            }
+            foreach (array_keys($exportFiles) as $file) {
+                $path = UPLOADS_DIR . '/' . $file;
+                if (is_file($path)) {
+                    $tar->addFile($path, 'uploads/' . $file);
+                }
+            }
+            $tarGz = $tar->compress(Phar::GZ);
+            $gzPath = $tarGz->getPath();
+            unset($tar, $tarGz);
+            @unlink($tarPath);
+        } catch (Throwable $error) {
+            @unlink($tarPath);
+            throw new RuntimeException('Could not create export archive: ' . $error->getMessage());
+        }
+
+        $downloadName = 'receipt-keeper-export-' . $suffix . '-' . gmdate('Ymd-His') . '.tar.gz';
+        header('Content-Type: application/gzip');
         header('Content-Disposition: attachment; filename="' . $downloadName . '"');
-        header('Content-Length: ' . (string) filesize($zipPath));
+        header('Content-Length: ' . (string) filesize($gzPath));
         header('Cache-Control: no-store, max-age=0');
-        readfile($zipPath);
-        @unlink($zipPath);
+        readfile($gzPath);
+        @unlink($gzPath);
         exit;
     }
 
@@ -715,11 +832,23 @@ class AdminController
         );
 
         $zipAvailable = class_exists('ZipArchive');
+        $tarAvailable = class_exists('PharData');
+        $archiveAvailable = $zipAvailable || $tarAvailable;
+        $archiveDetailParts = [];
+        if ($zipAvailable) {
+            $archiveDetailParts[] = 'ZipArchive available';
+        }
+        if ($tarAvailable) {
+            $archiveDetailParts[] = 'PharData (tar/tar.gz) available';
+        }
+        if ($archiveDetailParts === []) {
+            $archiveDetailParts[] = 'ZipArchive and PharData missing';
+        }
         $checks[] = $this->makeCheck(
-            'Zip export/import support',
+            'Archive export/import support',
             false,
-            $zipAvailable,
-            $zipAvailable ? 'ZipArchive is available.' : 'ZipArchive extension missing.'
+            $archiveAvailable,
+            implode('; ', $archiveDetailParts) . '.'
         );
 
         $curlAvailable = function_exists('curl_init');
@@ -848,6 +977,21 @@ class AdminController
         }
         $value = normalize_base_path_value((string) APP_BASE_PATH);
         return $value === '' ? 'auto-detect' : $value;
+    }
+
+    private function archiveSupportLabel(): string
+    {
+        $parts = [];
+        if (class_exists('ZipArchive')) {
+            $parts[] = 'zip';
+        }
+        if (class_exists('PharData')) {
+            $parts[] = 'tar/tar.gz';
+        }
+        if ($parts === []) {
+            return 'Unavailable';
+        }
+        return strtoupper(implode(', ', $parts));
     }
 
     private function defaultOcrProvider(): string
