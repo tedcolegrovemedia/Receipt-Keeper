@@ -7,10 +7,16 @@ class AdminController
     {
         ensure_authenticated();
 
-        $error = '';
-        $success = '';
+        $error = isset($_SESSION['admin_flash_error']) ? (string) $_SESSION['admin_flash_error'] : '';
+        $success = isset($_SESSION['admin_flash_success']) ? (string) $_SESSION['admin_flash_success'] : '';
+        unset($_SESSION['admin_flash_error'], $_SESSION['admin_flash_success']);
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             [$success, $error] = $this->handlePostAction();
+            if ($error === '' && $success !== '') {
+                $_SESSION['admin_flash_success'] = $success;
+                redirect_to('admin');
+            }
         }
 
         $checks = $this->buildChecks();
@@ -615,7 +621,11 @@ class AdminController
             $content .= "declare(strict_types=1);\n\n";
             $content .= "// Local overrides (do not commit).\n";
             $content .= $line . "\n";
-            return file_put_contents($path, $content, LOCK_EX) !== false;
+            $ok = file_put_contents($path, $content, LOCK_EX) !== false;
+            if ($ok) {
+                invalidate_runtime_config_cache();
+            }
+            return $ok;
         }
 
         $content = file_get_contents($path);
@@ -629,11 +639,19 @@ class AdminController
             if (!is_string($updated)) {
                 return false;
             }
-            return file_put_contents($path, $updated, LOCK_EX) !== false;
+            $ok = file_put_contents($path, $updated, LOCK_EX) !== false;
+            if ($ok) {
+                invalidate_runtime_config_cache();
+            }
+            return $ok;
         }
 
         $updated = rtrim($content) . "\n" . $line . "\n";
-        return file_put_contents($path, $updated, LOCK_EX) !== false;
+        $ok = file_put_contents($path, $updated, LOCK_EX) !== false;
+        if ($ok) {
+            invalidate_runtime_config_cache();
+        }
+        return $ok;
     }
 
     private function buildChecks(): array

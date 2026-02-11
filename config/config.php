@@ -1211,6 +1211,21 @@ function normalize_base_path_value(string $path): string
     return $path === '' ? '' : $path;
 }
 
+function invalidate_runtime_config_cache(): void
+{
+    clearstatcache(true, LOCAL_CONFIG_FILE);
+    clearstatcache(true, __FILE__);
+
+    if (!function_exists('opcache_invalidate')) {
+        return;
+    }
+
+    @opcache_invalidate(__FILE__, true);
+    if (is_file(LOCAL_CONFIG_FILE)) {
+        @opcache_invalidate(LOCAL_CONFIG_FILE, true);
+    }
+}
+
 function map_receipt_row(array $row): array
 {
     return [
