@@ -59,6 +59,7 @@ It supports:
   - Base path override for subfolder deployments.
 
 - UI:
+  - Receipt-style favicon across app pages.
   - Light/dark mode toggle with persistence in localStorage.
   - Category reference table (accordion).
   - Save confirmation modal after successful receipt save (auto-closes in 3 seconds).
