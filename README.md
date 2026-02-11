@@ -133,8 +133,8 @@ Optional PHP extensions by feature:
 - `pdo_mysql` for MySQL storage
 - `curl` for Veryfi OCR
 - `zip` (`ZipArchive`) for ZIP export/import (preferred)
-- `phar` (`PharData`) for TAR/TAR.GZ export/import fallback
-  - if both are unavailable, export/import still works via JSON bundle fallback
+- `phar` (`PharData`) for native TAR/TAR.GZ export/import fallback
+- `zlib` (`gzopen`) to read/write `.tar.gz` in built-in fallback mode
 
 Third-party services (optional):
 - Veryfi OCR
@@ -306,8 +306,9 @@ Also ensure:
 
 Archive format behavior:
 - Uses ZIP when `ZipArchive` is available.
-- Falls back to `tar.gz` when ZIP is unavailable but `PharData` is available.
-- Falls back to `.json` export/import bundle when neither extension is available.
+- Falls back to native `tar.gz` when ZIP is unavailable but `PharData` is available.
+- If both archive extensions are missing, uses built-in TAR export/import.
+- If TAR generation still fails, falls back to `.json` export/import bundle.
 
 Full export archive contains:
 - `receipts/receipts.json`

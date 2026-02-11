@@ -396,9 +396,30 @@ class AdminController
                 $phar = new PharData($path);
                 return ['ok' => true, 'type' => 'tar', 'archive' => $phar];
             } catch (Throwable $error) {
-                if ($preferTar) {
-                    return ['ok' => false, 'error' => 'Could not open tar archive: ' . $error->getMessage()];
+                // Fall through to pure-PHP tar parser fallback.
+            }
+        }
+
+        if ($preferTar) {
+            $prepared = $this->prepareTarPathForIndex($path, $name);
+            if (!$prepared['ok']) {
+                return ['ok' => false, 'error' => (string) $prepared['error']];
+            }
+            try {
+                $index = $this->buildTarIndex((string) $prepared['path']);
+                return [
+                    'ok' => true,
+                    'type' => 'tar_index',
+                    'path' => (string) $prepared['path'],
+                    'cleanupPath' => (string) ($prepared['cleanupPath'] ?? ''),
+                    'index' => $index,
+                ];
+            } catch (Throwable $error) {
+                $cleanupPath = (string) ($prepared['cleanupPath'] ?? '');
+                if ($cleanupPath !== '' && is_file($cleanupPath)) {
+                    @unlink($cleanupPath);
                 }
+                return ['ok' => false, 'error' => 'Could not parse tar archive: ' . $error->getMessage()];
             }
         }
 
@@ -441,6 +462,34 @@ class AdminController
                     }
                 }
             }
+
+            if ($type === 'tar_index') {
+                $index = is_array($archive['index'] ?? null) ? $archive['index'] : [];
+                $normalized = $this->normalizeTarEntryName($entry);
+                $meta = $index[$normalized] ?? null;
+                if (!is_array($meta)) {
+                    continue;
+                }
+                $path = (string) ($archive['path'] ?? '');
+                $offset = (int) ($meta['offset'] ?? -1);
+                $size = (int) ($meta['size'] ?? -1);
+                if ($path === '' || $offset < 0 || $size < 0 || !is_file($path)) {
+                    continue;
+                }
+                $fp = @fopen($path, 'rb');
+                if (!$fp) {
+                    continue;
+                }
+                if (@fseek($fp, $offset, SEEK_SET) !== 0) {
+                    fclose($fp);
+                    continue;
+                }
+                $content = $size > 0 ? stream_get_contents($fp, $size) : '';
+                fclose($fp);
+                if (is_string($content)) {
+                    return $content;
+                }
+            }
         }
         return null;
     }
@@ -450,6 +499,126 @@ class AdminController
         if (($archive['type'] ?? '') === 'zip' && ($archive['archive'] ?? null) instanceof ZipArchive) {
             $archive['archive']->close();
         }
+        $cleanupPath = (string) ($archive['cleanupPath'] ?? '');
+        if ($cleanupPath !== '' && is_file($cleanupPath)) {
+            @unlink($cleanupPath);
+        }
+    }
+
+    private function prepareTarPathForIndex(string $path, string $name): array
+    {
+        if (preg_match('/\.tar$/', $name) === 1) {
+            return ['ok' => true, 'path' => $path, 'cleanupPath' => ''];
+        }
+        if (preg_match('/\.(tar\.gz|tgz)$/', $name) === 1) {
+            if (!function_exists('gzopen')) {
+                return ['ok' => false, 'error' => 'Cannot read .tar.gz archive: zlib (gzopen) is unavailable.'];
+            }
+            $tmp = tempnam(sys_get_temp_dir(), 'rktar_');
+            if ($tmp === false) {
+                return ['ok' => false, 'error' => 'Could not allocate temp file for tar extraction.'];
+            }
+            $tarPath = $tmp . '.tar';
+            if (!@rename($tmp, $tarPath)) {
+                $tarPath = $tmp;
+            }
+
+            $in = @gzopen($path, 'rb');
+            $out = @fopen($tarPath, 'wb');
+            if (!$in || !$out) {
+                if (is_resource($in)) {
+                    gzclose($in);
+                }
+                if (is_resource($out)) {
+                    fclose($out);
+                }
+                @unlink($tarPath);
+                return ['ok' => false, 'error' => 'Could not open .tar.gz stream for import.'];
+            }
+            while (!gzeof($in)) {
+                $chunk = gzread($in, 1048576);
+                if ($chunk === false) {
+                    gzclose($in);
+                    fclose($out);
+                    @unlink($tarPath);
+                    return ['ok' => false, 'error' => 'Failed reading .tar.gz archive stream.'];
+                }
+                if ($chunk !== '' && fwrite($out, $chunk) === false) {
+                    gzclose($in);
+                    fclose($out);
+                    @unlink($tarPath);
+                    return ['ok' => false, 'error' => 'Failed writing temporary tar archive.'];
+                }
+            }
+            gzclose($in);
+            fclose($out);
+            return ['ok' => true, 'path' => $tarPath, 'cleanupPath' => $tarPath];
+        }
+
+        return ['ok' => false, 'error' => 'Unsupported tar archive format.'];
+    }
+
+    private function buildTarIndex(string $path): array
+    {
+        $fp = @fopen($path, 'rb');
+        if (!$fp) {
+            throw new RuntimeException('Could not open tar file.');
+        }
+
+        $index = [];
+        while (true) {
+            $header = fread($fp, 512);
+            if ($header === false || $header === '') {
+                break;
+            }
+            if (strlen($header) < 512) {
+                break;
+            }
+            if (trim($header, "\0") === '') {
+                break;
+            }
+
+            $name = rtrim(substr($header, 0, 100), "\0");
+            $prefix = rtrim(substr($header, 345, 155), "\0");
+            if ($prefix !== '') {
+                $name = $prefix . '/' . $name;
+            }
+            $name = $this->normalizeTarEntryName($name);
+
+            $sizeRaw = trim((string) str_replace("\0", '', substr($header, 124, 12)));
+            $size = $sizeRaw === '' ? 0 : (int) octdec($sizeRaw);
+            $typeFlag = substr($header, 156, 1);
+
+            $offset = ftell($fp);
+            if ($offset === false) {
+                fclose($fp);
+                throw new RuntimeException('Could not read tar file offset.');
+            }
+
+            if ($name !== '' && ($typeFlag === '0' || $typeFlag === "\0" || $typeFlag === '')) {
+                $index[$name] = ['offset' => $offset, 'size' => $size];
+            }
+
+            $skip = (int) (ceil($size / 512) * 512);
+            if ($skip > 0 && fseek($fp, $skip, SEEK_CUR) !== 0) {
+                fclose($fp);
+                throw new RuntimeException('Could not skip tar file entry data.');
+            }
+        }
+
+        fclose($fp);
+        return $index;
+    }
+
+    private function normalizeTarEntryName(string $name): string
+    {
+        $name = str_replace('\\', '/', trim($name));
+        $name = preg_replace('#/+#', '/', $name) ?? '';
+        $name = ltrim($name, '/');
+        while (strpos($name, './') === 0) {
+            $name = substr($name, 2);
+        }
+        return $name;
     }
 
     private function tryImportJsonBundle(string $path, bool $replaceExisting, string $originalName = ''): array
@@ -724,7 +893,247 @@ class AdminController
             exit;
         }
 
+        if ($this->downloadPureTarBundle($manifest, $receipts, array_keys($exportFiles), $suffix)) {
+            return;
+        }
+
         $this->downloadJsonBundle($manifest, $receipts, array_keys($exportFiles), $suffix);
+    }
+
+    private function downloadPureTarBundle(array $manifest, array $receipts, array $files, string $suffix): bool
+    {
+        $tmpFile = tempnam(sys_get_temp_dir(), 'rkexp_');
+        if ($tmpFile === false) {
+            return false;
+        }
+        $tarPath = $tmpFile . '.tar';
+        if (!@rename($tmpFile, $tarPath)) {
+            $tarPath = $tmpFile;
+        }
+
+        try {
+            $this->writeTarBundleFile($tarPath, $manifest, $receipts, $files);
+        } catch (Throwable $error) {
+            @unlink($tarPath);
+            return false;
+        }
+
+        if (function_exists('gzopen') && $this->gzipFile($tarPath, $tarPath . '.gz')) {
+            $gzPath = $tarPath . '.gz';
+            $downloadName = 'receipt-keeper-export-' . $suffix . '-' . gmdate('Ymd-His') . '.tar.gz';
+            header('Content-Type: application/gzip');
+            header('Content-Disposition: attachment; filename="' . $downloadName . '"');
+            header('Content-Length: ' . (string) filesize($gzPath));
+            header('Cache-Control: no-store, max-age=0');
+            readfile($gzPath);
+            @unlink($tarPath);
+            @unlink($gzPath);
+            exit;
+        }
+
+        $downloadName = 'receipt-keeper-export-' . $suffix . '-' . gmdate('Ymd-His') . '.tar';
+        header('Content-Type: application/x-tar');
+        header('Content-Disposition: attachment; filename="' . $downloadName . '"');
+        header('Content-Length: ' . (string) filesize($tarPath));
+        header('Cache-Control: no-store, max-age=0');
+        readfile($tarPath);
+        @unlink($tarPath);
+        exit;
+    }
+
+    private function writeTarBundleFile(string $tarPath, array $manifest, array $receipts, array $files): void
+    {
+        $fp = @fopen($tarPath, 'wb');
+        if (!$fp) {
+            throw new RuntimeException('Could not create tar file.');
+        }
+
+        $manifestJson = json_encode($manifest, JSON_PRETTY_PRINT);
+        $receiptsJson = json_encode($receipts, JSON_PRETTY_PRINT);
+        if (!is_string($manifestJson) || !is_string($receiptsJson)) {
+            fclose($fp);
+            throw new RuntimeException('Could not encode export metadata.');
+        }
+
+        $this->writeTarStringEntry($fp, 'manifest.json', $manifestJson);
+        $this->writeTarStringEntry($fp, 'receipts/receipts.json', $receiptsJson);
+        $this->writeTarStringEntry($fp, 'receipts/receipts.csv', $this->buildReceiptsCsv($receipts));
+
+        if (is_file(VENDOR_MEMORY_FILE)) {
+            $raw = file_get_contents(VENDOR_MEMORY_FILE);
+            if (is_string($raw) && $raw !== '') {
+                $this->writeTarStringEntry($fp, 'meta/vendor-memory.json', $raw);
+            }
+        }
+        if (is_file(VERYFI_USAGE_FILE)) {
+            $raw = file_get_contents(VERYFI_USAGE_FILE);
+            if (is_string($raw) && $raw !== '') {
+                $this->writeTarStringEntry($fp, 'meta/veryfi-usage.json', $raw);
+            }
+        }
+
+        foreach ($files as $file) {
+            $safe = basename((string) $file);
+            if ($safe === '' || $safe === '.' || $safe === '..') {
+                continue;
+            }
+            $path = UPLOADS_DIR . '/' . $safe;
+            if (!is_file($path)) {
+                continue;
+            }
+            $this->writeTarFileEntry($fp, 'uploads/' . $safe, $path);
+        }
+
+        fwrite($fp, str_repeat("\0", 1024));
+        fclose($fp);
+    }
+
+    private function writeTarStringEntry($fp, string $entryName, string $contents): void
+    {
+        $name = $this->normalizeTarEntryName($entryName);
+        if ($name === '') {
+            return;
+        }
+        $size = strlen($contents);
+        fwrite($fp, $this->buildTarHeader($name, $size, time()));
+        if ($size > 0) {
+            fwrite($fp, $contents);
+        }
+        $pad = (512 - ($size % 512)) % 512;
+        if ($pad > 0) {
+            fwrite($fp, str_repeat("\0", $pad));
+        }
+    }
+
+    private function writeTarFileEntry($fp, string $entryName, string $sourcePath): void
+    {
+        $name = $this->normalizeTarEntryName($entryName);
+        if ($name === '') {
+            return;
+        }
+        $fileSize = filesize($sourcePath);
+        if (!is_int($fileSize) && !is_float($fileSize)) {
+            return;
+        }
+        $size = (int) $fileSize;
+        $mtime = (int) (@filemtime($sourcePath) ?: time());
+        fwrite($fp, $this->buildTarHeader($name, $size, $mtime));
+
+        $in = @fopen($sourcePath, 'rb');
+        $written = 0;
+        if ($in) {
+            while (!feof($in)) {
+                $chunk = fread($in, 1048576);
+                if ($chunk === false) {
+                    break;
+                }
+                if ($chunk !== '') {
+                    fwrite($fp, $chunk);
+                    $written += strlen($chunk);
+                }
+            }
+            fclose($in);
+        }
+
+        if ($written < $size) {
+            fwrite($fp, str_repeat("\0", $size - $written));
+        }
+
+        $pad = (512 - ($size % 512)) % 512;
+        if ($pad > 0) {
+            fwrite($fp, str_repeat("\0", $pad));
+        }
+    }
+
+    private function buildTarHeader(string $name, int $size, int $mtime): string
+    {
+        $name = $this->normalizeTarEntryName($name);
+        $prefix = '';
+        if (strlen($name) > 100) {
+            $cut = strrpos($name, '/');
+            if ($cut !== false) {
+                $prefix = substr($name, 0, $cut);
+                $base = substr($name, $cut + 1);
+                if (strlen($base) <= 100 && strlen($prefix) <= 155) {
+                    $name = $base;
+                } else {
+                    $prefix = '';
+                }
+            }
+        }
+        if (strlen($name) > 100 || strlen($prefix) > 155) {
+            throw new RuntimeException('Tar entry path is too long: ' . $name);
+        }
+
+        $header = '';
+        $header .= str_pad($name, 100, "\0");
+        $header .= str_pad(sprintf('%07o', 0644), 7, '0', STR_PAD_LEFT) . "\0";
+        $header .= str_pad(sprintf('%07o', 0), 7, '0', STR_PAD_LEFT) . "\0";
+        $header .= str_pad(sprintf('%07o', 0), 7, '0', STR_PAD_LEFT) . "\0";
+        $header .= str_pad(sprintf('%011o', max(0, $size)), 11, '0', STR_PAD_LEFT) . "\0";
+        $header .= str_pad(sprintf('%011o', max(0, $mtime)), 11, '0', STR_PAD_LEFT) . "\0";
+        $header .= '        ';
+        $header .= '0';
+        $header .= str_repeat("\0", 100);
+        $header .= "ustar\0";
+        $header .= '00';
+        $header .= str_repeat("\0", 32);
+        $header .= str_repeat("\0", 32);
+        $header .= str_repeat("\0", 8);
+        $header .= str_repeat("\0", 8);
+        $header .= str_pad($prefix, 155, "\0");
+        $header .= str_repeat("\0", 12);
+
+        if (strlen($header) !== 512) {
+            throw new RuntimeException('Tar header length is invalid.');
+        }
+
+        $sum = 0;
+        for ($i = 0; $i < 512; $i += 1) {
+            $sum += ord($header[$i]);
+        }
+        $checksum = str_pad(sprintf('%06o', $sum), 6, '0', STR_PAD_LEFT) . "\0 ";
+        $header = substr_replace($header, $checksum, 148, 8);
+        return $header;
+    }
+
+    private function gzipFile(string $sourcePath, string $gzipPath): bool
+    {
+        if (!function_exists('gzopen')) {
+            return false;
+        }
+        $in = @fopen($sourcePath, 'rb');
+        $out = @gzopen($gzipPath, 'wb9');
+        if (!$in || !$out) {
+            if (is_resource($in)) {
+                fclose($in);
+            }
+            if (is_resource($out)) {
+                gzclose($out);
+            }
+            @unlink($gzipPath);
+            return false;
+        }
+
+        $ok = true;
+        while (!feof($in)) {
+            $chunk = fread($in, 1048576);
+            if ($chunk === false) {
+                $ok = false;
+                break;
+            }
+            if ($chunk !== '' && gzwrite($out, $chunk) === false) {
+                $ok = false;
+                break;
+            }
+        }
+        fclose($in);
+        gzclose($out);
+
+        if (!$ok) {
+            @unlink($gzipPath);
+        }
+        return $ok;
     }
 
     private function downloadJsonBundle(array $manifest, array $receipts, array $files, string $suffix): void
@@ -1041,7 +1450,7 @@ class AdminController
             $archiveDetailParts[] = 'PharData (tar/tar.gz) available';
         }
         if ($archiveDetailParts === []) {
-            $archiveDetailParts[] = 'ZipArchive and PharData missing; JSON bundle fallback available';
+            $archiveDetailParts[] = 'ZipArchive and PharData missing; built-in TAR/JSON fallback available';
         }
         $checks[] = $this->makeCheck(
             'Archive export/import support',
@@ -1188,7 +1597,7 @@ class AdminController
             $parts[] = 'tar/tar.gz';
         }
         if ($parts === []) {
-            return 'JSON fallback only';
+            return 'Built-in TAR/JSON fallback';
         }
         return strtoupper(implode(', ', $parts));
     }
