@@ -246,7 +246,7 @@ class AuthController
 
     private function maskEmail(string $email): string
     {
-        if (!str_contains($email, '@')) {
+        if (strpos($email, '@') === false) {
             return $email;
         }
         [$local, $domain] = explode('@', $email, 2);
