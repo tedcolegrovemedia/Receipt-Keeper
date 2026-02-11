@@ -894,6 +894,56 @@ body.dark .admin-flash-error {
   gap: 14px;
 }
 
+.admin-accordion {
+  padding: 0;
+  overflow: hidden;
+}
+
+.admin-accordion-summary {
+  list-style: none;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  padding: 16px 20px;
+  border-bottom: 1px solid transparent;
+}
+
+.admin-accordion-summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-accordion-summary::after {
+  content: "Show";
+  justify-self: start;
+  margin-top: 2px;
+  color: var(--accent-strong);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.admin-accordion[open] .admin-accordion-summary {
+  border-bottom-color: var(--line);
+}
+
+.admin-accordion[open] .admin-accordion-summary::after {
+  content: "Hide";
+}
+
+.admin-accordion-title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.admin-accordion-subtitle {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.admin-accordion-content {
+  padding: 16px 20px 20px;
+}
+
 .admin-tool {
   border: 1px solid var(--line);
   background: var(--panel-muted);
@@ -1148,6 +1198,14 @@ body.dark .admin-flash-error {
 
   .panel-actions {
     width: 100%;
+  }
+
+  .admin-accordion-summary {
+    padding: 14px;
+  }
+
+  .admin-accordion-content {
+    padding: 14px;
   }
 
   input[type="search"] {

@@ -50,11 +50,11 @@ It supports:
   - CSV includes total sum row and USD formatting.
 
 - Admin tools:
-  - Runtime/installation diagnostics.
+  - Runtime/installation diagnostics (collapsed accordions).
   - Storage checks (JSON/SQLite/MySQL).
   - Login username editor.
   - OCR remaining counter editor (Veryfi quota).
-  - Full backup export ZIP.
+  - Backup export ZIP for all years or a selected year.
   - Backup import ZIP.
   - Base path override for subfolder deployments.
 
@@ -297,14 +297,14 @@ Also ensure:
 - storage diagnostics and connectivity probes
 - login username editor
 - OCR remaining counter editor
-- full export ZIP generator
+- export ZIP generator (all years or selected year)
 - import ZIP restore
 - base path updater
 
 Full export ZIP contains:
 - `receipts/receipts.json`
 - `receipts/receipts.csv`
-- `uploads/*`
+- `uploads/*` (only files referenced by the exported receipt scope)
 - `meta/vendor-memory.json` (if present)
 - `meta/veryfi-usage.json` (if present)
 - `manifest.json`

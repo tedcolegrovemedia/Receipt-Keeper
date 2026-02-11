@@ -55,6 +55,7 @@ class AdminController
             'ocrLimit' => $ocrLimit,
             'appUsernameValue' => get_app_username(),
             'appBasePathValue' => defined('APP_BASE_PATH') ? (string) APP_BASE_PATH : '',
+            'exportYears' => $this->extractReceiptYears(fetch_all_receipts()),
         ]);
     }
 
@@ -75,7 +76,7 @@ class AdminController
             case 'update_app_username':
                 return $this->handleUpdateAppUsername();
             case 'export_bundle':
-                $this->downloadExportBundle();
+                $this->downloadExportBundle((string) ($_POST['export_year'] ?? 'all'));
                 return ['', 'Failed to start export download.'];
             case 'import_bundle':
                 return $this->handleImportBundle();
@@ -375,7 +376,7 @@ class AdminController
         return null;
     }
 
-    private function downloadExportBundle(): void
+    private function downloadExportBundle(string $requestedYear = 'all'): void
     {
         if (!class_exists('ZipArchive')) {
             render('admin', [
@@ -387,6 +388,7 @@ class AdminController
                 'ocrRemainingValue' => '',
                 'ocrLimit' => (int) VERYFI_MONTHLY_LIMIT,
                 'appBasePathValue' => defined('APP_BASE_PATH') ? (string) APP_BASE_PATH : '',
+                'exportYears' => $this->extractReceiptYears(fetch_all_receipts()),
             ]);
         }
 
@@ -399,7 +401,16 @@ class AdminController
             $zipPath = $tmpFile;
         }
 
-        $receipts = fetch_all_receipts();
+        $allReceipts = fetch_all_receipts();
+        $scope = $this->normalizeExportYear($requestedYear);
+        $receipts = $scope === 'all'
+            ? $allReceipts
+            : array_values(array_filter($allReceipts, function ($receipt) use ($scope) {
+                if (!is_array($receipt)) {
+                    return false;
+                }
+                return $this->extractReceiptYear($receipt) === $scope;
+            }));
         $zip = new ZipArchive();
         if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             @unlink($zipPath);
@@ -413,6 +424,7 @@ class AdminController
             'storageMode' => storage_mode(),
             'storageDriver' => storage_driver(),
             'receiptCount' => count($receipts),
+            'scopeYear' => $scope,
         ];
         $zip->addFromString('manifest.json', json_encode($manifest, JSON_PRETTY_PRINT));
         $zip->addFromString('receipts/receipts.json', json_encode($receipts, JSON_PRETTY_PRINT));
@@ -431,24 +443,32 @@ class AdminController
             }
         }
 
-        if (is_dir(UPLOADS_DIR)) {
-            $entries = scandir(UPLOADS_DIR);
-            if (is_array($entries)) {
-                foreach ($entries as $entry) {
-                    if ($entry === '.' || $entry === '..') {
-                        continue;
-                    }
-                    $path = UPLOADS_DIR . '/' . $entry;
-                    if (is_file($path)) {
-                        $zip->addFile($path, 'uploads/' . $entry);
-                    }
-                }
+        $exportFiles = [];
+        foreach ($receipts as $receipt) {
+            if (!is_array($receipt)) {
+                continue;
+            }
+            $imageFile = trim((string) ($receipt['imageFile'] ?? ''));
+            if ($imageFile === '') {
+                continue;
+            }
+            $safeFile = basename($imageFile);
+            if ($safeFile === '' || $safeFile === '.' || $safeFile === '..') {
+                continue;
+            }
+            $exportFiles[$safeFile] = true;
+        }
+        foreach (array_keys($exportFiles) as $file) {
+            $path = UPLOADS_DIR . '/' . $file;
+            if (is_file($path)) {
+                $zip->addFile($path, 'uploads/' . $file);
             }
         }
 
         $zip->close();
 
-        $downloadName = 'receipt-keeper-export-' . gmdate('Ymd-His') . '.zip';
+        $suffix = $scope === 'all' ? 'all' : $scope;
+        $downloadName = 'receipt-keeper-export-' . $suffix . '-' . gmdate('Ymd-His') . '.zip';
         header('Content-Type: application/zip');
         header('Content-Disposition: attachment; filename="' . $downloadName . '"');
         header('Content-Length: ' . (string) filesize($zipPath));
@@ -493,6 +513,51 @@ class AdminController
         }
 
         return implode("\n", $lines);
+    }
+
+    private function normalizeExportYear(string $value): string
+    {
+        $trimmed = trim($value);
+        if (preg_match('/^\d{4}$/', $trimmed) === 1) {
+            return $trimmed;
+        }
+        return 'all';
+    }
+
+    private function extractReceiptYear(array $receipt): ?string
+    {
+        $date = trim((string) ($receipt['date'] ?? ''));
+        if (preg_match('/^(\d{4})-\d{2}-\d{2}/', $date, $match) === 1) {
+            return $match[1];
+        }
+        if (preg_match('/^\d{4}$/', $date) === 1) {
+            return $date;
+        }
+
+        $createdAt = trim((string) ($receipt['createdAt'] ?? ''));
+        if (preg_match('/^(\d{4})-\d{2}-\d{2}/', $createdAt, $match) === 1) {
+            return $match[1];
+        }
+
+        return null;
+    }
+
+    private function extractReceiptYears(array $receipts): array
+    {
+        $years = [];
+        foreach ($receipts as $receipt) {
+            if (!is_array($receipt)) {
+                continue;
+            }
+            $year = $this->extractReceiptYear($receipt);
+            if ($year === null) {
+                continue;
+            }
+            $years[$year] = true;
+        }
+        $keys = array_keys($years);
+        rsort($keys, SORT_STRING);
+        return $keys;
     }
 
     private function formatUsd(float $value): string
