@@ -3,9 +3,17 @@ declare(strict_types=1);
 
 function base_path(): string
 {
+    $configured = '';
+    if (defined('APP_BASE_PATH')) {
+        $configured = normalize_base_path_value((string) APP_BASE_PATH);
+    }
+    if ($configured !== '') {
+        return $configured;
+    }
+
     $script = $_SERVER['SCRIPT_NAME'] ?? '';
-    $base = rtrim(str_replace('\\', '/', dirname($script)), '/');
-    if ($base === '/' || $base === '.') {
+    $base = normalize_base_path_value((string) dirname(str_replace('\\', '/', $script)));
+    if ($base === '') {
         return '';
     }
     return $base;

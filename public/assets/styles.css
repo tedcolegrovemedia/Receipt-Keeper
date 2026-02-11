@@ -845,6 +845,77 @@ body.dark .diag-fail {
   word-break: break-word;
 }
 
+.admin-flash {
+  border: 1px solid var(--line);
+  padding: 12px 14px;
+  font-weight: 700;
+}
+
+.admin-flash-success {
+  border-color: #5ca872;
+  color: #245f36;
+  background: #eaf7ef;
+}
+
+.admin-flash-error {
+  border-color: #c96560;
+  color: #8d2722;
+  background: #fdecec;
+}
+
+body.dark .admin-flash-success {
+  border-color: #4f9b67;
+  color: #bfe7c8;
+  background: #203428;
+}
+
+body.dark .admin-flash-error {
+  border-color: #b05a55;
+  color: #f0c0bd;
+  background: #3c2321;
+}
+
+.admin-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.admin-tool {
+  border: 1px solid var(--line);
+  background: var(--panel-muted);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.admin-tool h3 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.admin-tool p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.admin-tool code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.admin-tool .btn {
+  justify-self: start;
+}
+
+.admin-checkbox {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 600;
+}
+
 .empty-state {
   text-align: center;
   color: var(--muted);

@@ -40,6 +40,9 @@ if (!defined('VERYFI_CLIENT_SECRET')) {
 if (!defined('OCR_DEFAULT_ENABLED')) {
     define('OCR_DEFAULT_ENABLED', true);
 }
+if (!defined('APP_BASE_PATH')) {
+    define('APP_BASE_PATH', '');
+}
 if (!defined('STORAGE_MODE')) {
     define('STORAGE_MODE', 'auto');
 }
@@ -685,6 +688,43 @@ function increment_veryfi_usage(?int $now = null): array
     return $status;
 }
 
+function set_veryfi_remaining(int $remaining, ?int $now = null): array
+{
+    $status = veryfi_usage_status($now);
+    $limit = (int) ($status['limit'] ?? 0);
+    if ($limit <= 0) {
+        return $status;
+    }
+
+    $remaining = max(0, min($limit, $remaining));
+    $count = $limit - $remaining;
+    $date = (string) $status['date'];
+    $usage = load_veryfi_usage();
+    $usage[$date] = $count;
+    save_veryfi_usage($usage);
+
+    $status['count'] = $count;
+    $status['remaining'] = $remaining;
+    return $status;
+}
+
+function normalize_base_path_value(string $path): string
+{
+    $path = trim(str_replace('\\', '/', $path));
+    if ($path === '' || $path === '/') {
+        return '';
+    }
+    if ($path[0] !== '/') {
+        $path = '/' . $path;
+    }
+    $path = preg_replace('#/+#', '/', $path);
+    if (!is_string($path)) {
+        return '';
+    }
+    $path = rtrim($path, '/');
+    return $path === '' ? '' : $path;
+}
+
 function map_receipt_row(array $row): array
 {
     return [
@@ -920,6 +960,21 @@ function delete_receipt_by_id(string $id): bool
         return false;
     }
     return save_receipts_json($filtered);
+}
+
+function delete_all_receipts(): bool
+{
+    if (receipts_use_mysql()) {
+        $db = get_mysql_db();
+        return $db->exec('DELETE FROM receipts') !== false;
+    }
+
+    if (receipts_use_sqlite()) {
+        $db = get_db();
+        return $db->exec('DELETE FROM receipts') !== false;
+    }
+
+    return save_receipts_json([]);
 }
 
 function build_image_url(string $id): string

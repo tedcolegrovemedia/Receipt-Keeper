@@ -53,6 +53,91 @@
         </div>
       </header>
 
+      <?php if (!empty($success)): ?>
+      <section class="panel">
+        <div class="admin-flash admin-flash-success"><?php echo htmlspecialchars((string) $success, ENT_QUOTES, 'UTF-8'); ?></div>
+      </section>
+      <?php endif; ?>
+
+      <?php if (!empty($error)): ?>
+      <section class="panel">
+        <div class="admin-flash admin-flash-error"><?php echo htmlspecialchars((string) $error, ENT_QUOTES, 'UTF-8'); ?></div>
+      </section>
+      <?php endif; ?>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Admin Tools</h2>
+            <p>Manual controls for OCR quota, export/import, and routing.</p>
+          </div>
+        </div>
+
+        <div class="admin-tools-grid">
+          <form class="admin-tool" method="post" action="">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
+            <input type="hidden" name="admin_action" value="update_ocr_remaining" />
+            <h3>OCR Remaining</h3>
+            <p>Set the remaining Veryfi OCR requests for the current month.</p>
+            <label>
+              Remaining (0 - <?php echo (int) ($ocrLimit ?? 0); ?>)
+              <input
+                type="number"
+                name="ocr_remaining"
+                min="0"
+                max="<?php echo (int) ($ocrLimit ?? 0); ?>"
+                value="<?php echo htmlspecialchars((string) ($ocrRemainingValue ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                <?php echo ((int) ($ocrLimit ?? 0)) > 0 ? '' : 'disabled'; ?>
+              />
+            </label>
+            <button class="btn primary" type="submit" <?php echo ((int) ($ocrLimit ?? 0)) > 0 ? '' : 'disabled'; ?>>
+              Save OCR Remaining
+            </button>
+          </form>
+
+          <form class="admin-tool" method="post" action="">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
+            <input type="hidden" name="admin_action" value="export_bundle" />
+            <h3>Full Export</h3>
+            <p>Download a full backup zip with receipts JSON, receipts CSV, and uploaded receipt files.</p>
+            <button class="btn primary" type="submit">Download Export Zip</button>
+          </form>
+
+          <form class="admin-tool" method="post" action="" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
+            <input type="hidden" name="admin_action" value="import_bundle" />
+            <h3>Import Export Zip</h3>
+            <p>Restore receipts and receipt files from a previous full export.</p>
+            <label>
+              Export zip file
+              <input type="file" name="import_bundle" accept=".zip,application/zip" required />
+            </label>
+            <label class="admin-checkbox">
+              <input type="checkbox" name="import_replace" value="1" checked />
+              Replace existing receipts and files before import
+            </label>
+            <button class="btn primary" type="submit">Import Backup Zip</button>
+          </form>
+
+          <form class="admin-tool" method="post" action="">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
+            <input type="hidden" name="admin_action" value="update_base_path" />
+            <h3>Base Path</h3>
+            <p>Set an explicit URL subfolder (for example <code>/writeoff</code>). Leave blank for auto-detect.</p>
+            <label>
+              App base path
+              <input
+                type="text"
+                name="app_base_path"
+                placeholder="/writeoff"
+                value="<?php echo htmlspecialchars((string) ($appBasePathValue ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+              />
+            </label>
+            <button class="btn primary" type="submit">Save Base Path</button>
+          </form>
+        </div>
+      </section>
+
       <section class="panel">
         <div class="panel-header">
           <div>
