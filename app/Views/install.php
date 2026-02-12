@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Receipt Keeper Setup</title>
+    <title>Receipt Keeper App Setup</title>
     <link rel="icon" type="image/svg+xml" href="<?php echo htmlspecialchars(asset_path('assets/favicon.svg'), ENT_QUOTES, 'UTF-8'); ?>" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -185,7 +185,7 @@
     <form class="setup-card" method="post" action="">
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" />
       <div>
-        <p class="eyebrow">Receipt Keeper</p>
+        <p class="eyebrow">Receipt Keeper App</p>
         <h1>Initial setup</h1>
         <p>Set your admin password, reset PIN, and optionally add Veryfi OCR credentials.</p>
       </div>

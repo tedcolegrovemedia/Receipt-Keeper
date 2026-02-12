@@ -32,7 +32,7 @@
       <header class="hero">
         <div>
           <p class="eyebrow">Receipt Logger</p>
-          <h1>Receipt Keeper</h1>
+          <h1>Receipt Keeper App</h1>
           <p class="lede">
             Snap a photo or upload a receipt, then log the basics.
           </p>

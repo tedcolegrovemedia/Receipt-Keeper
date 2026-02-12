@@ -1,4 +1,4 @@
-# Receipt Keeper
+# Receipt Keeper App
 
 Self-hosted receipt logger for tax/business expense tracking.
 
