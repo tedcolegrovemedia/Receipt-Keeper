@@ -93,6 +93,21 @@ class InstallController
                         redirect_to('');
                     }
                 }
+
+                if ($error === '' && $values['storage_mode'] === 'mysql') {
+                    $hash = password_hash($password, PASSWORD_DEFAULT);
+                    $pinHash = password_hash($resetPin, PASSWORD_DEFAULT);
+                    if (!set_password_hash($hash)) {
+                        $error = 'Could not save password. Check folder permissions.';
+                    } elseif (!set_password_reset_pin_hash($pinHash)) {
+                        $error = 'Could not save reset PIN. Check folder permissions.';
+                    } else {
+                        $this->writeLocalConfig($values);
+                        session_regenerate_id(true);
+                        $_SESSION['authenticated'] = true;
+                        redirect_to('');
+                    }
+                }
             }
         }
 

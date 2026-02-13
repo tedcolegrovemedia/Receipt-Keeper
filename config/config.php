@@ -14,6 +14,8 @@ const UPLOADS_DIR = DATA_DIR . '/uploads';
 const VENDOR_MEMORY_FILE = DATA_DIR . '/vendor-memory.json';
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOGIN_WINDOW_SECONDS = 900;
+const MAX_RESET_PIN_ATTEMPTS = 5;
+const RESET_PIN_WINDOW_SECONDS = 900;
 const MIN_PASSWORD_LENGTH = 12;
 
 // Optional local secrets file (do not commit).
@@ -252,9 +254,9 @@ function save_attempts(array $data): bool
     return file_put_contents(ATTEMPTS_FILE, json_encode($data), LOCK_EX) !== false;
 }
 
-function prune_attempts(array $timestamps, int $now): array
+function prune_attempts(array $timestamps, int $now, int $windowSeconds): array
 {
-    $threshold = $now - LOGIN_WINDOW_SECONDS;
+    $threshold = $now - $windowSeconds;
     return array_values(array_filter($timestamps, fn($ts) => $ts >= $threshold));
 }
 
@@ -264,12 +266,12 @@ function rate_limit_status(string $ip): array
     if (data_store_available()) {
         $data = load_attempts();
         $timestamps = $data[$ip] ?? [];
-        $timestamps = prune_attempts($timestamps, $now);
+        $timestamps = prune_attempts($timestamps, $now, LOGIN_WINDOW_SECONDS);
         $data[$ip] = $timestamps;
         save_attempts($data);
     } else {
         $timestamps = $_SESSION['login_attempts'][$ip] ?? [];
-        $timestamps = prune_attempts($timestamps, $now);
+        $timestamps = prune_attempts($timestamps, $now, LOGIN_WINDOW_SECONDS);
         $_SESSION['login_attempts'][$ip] = $timestamps;
     }
 
@@ -289,13 +291,13 @@ function register_failed_attempt(string $ip): int
     if (data_store_available()) {
         $data = load_attempts();
         $timestamps = $data[$ip] ?? [];
-        $timestamps = prune_attempts($timestamps, $now);
+        $timestamps = prune_attempts($timestamps, $now, LOGIN_WINDOW_SECONDS);
         $timestamps[] = $now;
         $data[$ip] = $timestamps;
         save_attempts($data);
     } else {
         $timestamps = $_SESSION['login_attempts'][$ip] ?? [];
-        $timestamps = prune_attempts($timestamps, $now);
+        $timestamps = prune_attempts($timestamps, $now, LOGIN_WINDOW_SECONDS);
         $timestamps[] = $now;
         $_SESSION['login_attempts'][$ip] = $timestamps;
     }
@@ -311,6 +313,64 @@ function clear_failed_attempts(string $ip): void
         save_attempts($data);
     } else {
         unset($_SESSION['login_attempts'][$ip]);
+    }
+}
+
+function reset_pin_rate_limit_status(string $ip): array
+{
+    $key = 'reset_pin:' . $ip;
+    $now = time();
+    if (data_store_available()) {
+        $data = load_attempts();
+        $timestamps = $data[$key] ?? [];
+        $timestamps = prune_attempts($timestamps, $now, RESET_PIN_WINDOW_SECONDS);
+        $data[$key] = $timestamps;
+        save_attempts($data);
+    } else {
+        $timestamps = $_SESSION['reset_pin_attempts'][$key] ?? [];
+        $timestamps = prune_attempts($timestamps, $now, RESET_PIN_WINDOW_SECONDS);
+        $_SESSION['reset_pin_attempts'][$key] = $timestamps;
+    }
+
+    $count = count($timestamps);
+    if ($count >= MAX_RESET_PIN_ATTEMPTS) {
+        $oldest = min($timestamps);
+        $retryAfter = max(1, ($oldest + RESET_PIN_WINDOW_SECONDS) - $now);
+        return ['blocked' => true, 'retry_after' => $retryAfter, 'count' => $count];
+    }
+
+    return ['blocked' => false, 'retry_after' => 0, 'count' => $count];
+}
+
+function register_failed_reset_pin_attempt(string $ip): int
+{
+    $key = 'reset_pin:' . $ip;
+    $now = time();
+    if (data_store_available()) {
+        $data = load_attempts();
+        $timestamps = $data[$key] ?? [];
+        $timestamps = prune_attempts($timestamps, $now, RESET_PIN_WINDOW_SECONDS);
+        $timestamps[] = $now;
+        $data[$key] = $timestamps;
+        save_attempts($data);
+    } else {
+        $timestamps = $_SESSION['reset_pin_attempts'][$key] ?? [];
+        $timestamps = prune_attempts($timestamps, $now, RESET_PIN_WINDOW_SECONDS);
+        $timestamps[] = $now;
+        $_SESSION['reset_pin_attempts'][$key] = $timestamps;
+    }
+    return count($timestamps);
+}
+
+function clear_failed_reset_pin_attempts(string $ip): void
+{
+    $key = 'reset_pin:' . $ip;
+    if (data_store_available()) {
+        $data = load_attempts();
+        unset($data[$key]);
+        save_attempts($data);
+    } else {
+        unset($_SESSION['reset_pin_attempts'][$key]);
     }
 }
 

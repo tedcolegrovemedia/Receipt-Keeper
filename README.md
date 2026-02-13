@@ -21,6 +21,7 @@ It supports:
   - Default username is `admin` and can be changed in Admin.
   - Forgot password with a 4-digit reset PIN + new password.
   - Rate-limited login attempts.
+  - Rate-limited reset PIN attempts.
 
 - Receipt capture:
   - Single upload: images + PDFs.
@@ -352,7 +353,7 @@ Common issues:
 - Keep `data/.htaccess` in place.
 - Use HTTPS in production.
 - Rotate shared password periodically.
-- Use SMTP with authenticated credentials where possible.
+- Keep PHP and extensions patched.
 
 ---
 

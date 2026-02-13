@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 class ApiController
 {
+    private const ALLOWED_UPLOAD_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'pdf'];
+
     public function handle(): void
     {
         ensure_authenticated(true);
@@ -300,6 +302,9 @@ class ApiController
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->respond(['ok' => false, 'error' => 'Invalid request method.'], 405);
         }
+        if (!$this->verifyStateChangingRequest()) {
+            $this->respond(['ok' => false, 'error' => 'Session expired. Please refresh and try again.'], 419);
+        }
         $raw = file_get_contents('php://input');
         $data = $raw ? json_decode($raw, true) : [];
         if (!is_array($data)) {
@@ -359,6 +364,9 @@ class ApiController
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->respond(['ok' => false, 'error' => 'Invalid request method.'], 405);
         }
+        if (!$this->verifyStateChangingRequest()) {
+            $this->respond(['ok' => false, 'error' => 'Session expired. Please refresh and try again.'], 419);
+        }
 
         $raw = file_get_contents('php://input');
         $data = $raw ? json_decode($raw, true) : [];
@@ -399,8 +407,11 @@ class ApiController
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->respond(['ok' => false, 'error' => 'Invalid request method.'], 405);
         }
+        if (!$this->verifyStateChangingRequest()) {
+            $this->respond(['ok' => false, 'error' => 'Session expired. Please refresh and try again.'], 419);
+        }
 
-        $id = trim($_POST['id'] ?? '');
+        $id = $this->sanitizeReceiptId((string) ($_POST['id'] ?? ''));
         if ($id === '') {
             $id = bin2hex(random_bytes(8));
         }
@@ -447,6 +458,7 @@ class ApiController
 
             $extMap = [
                 'image/jpeg' => 'jpg',
+                'image/jpg' => 'jpg',
                 'image/png' => 'png',
                 'image/webp' => 'webp',
                 'image/heic' => 'heic',
@@ -456,7 +468,12 @@ class ApiController
             $ext = $extMap[$mime] ?? '';
             if ($ext === '') {
                 $nameExt = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
-                $ext = preg_match('/^[a-z0-9]+$/', $nameExt) ? $nameExt : 'jpg';
+                if (preg_match('/^[a-z0-9]+$/', $nameExt) === 1 && in_array($nameExt, self::ALLOWED_UPLOAD_EXTENSIONS, true)) {
+                    $ext = $nameExt;
+                }
+            }
+            if ($ext === '' || !in_array($ext, self::ALLOWED_UPLOAD_EXTENSIONS, true)) {
+                $this->respond(['ok' => false, 'error' => 'Unsupported file type.'], 415);
             }
 
             $filename = $id . '.' . $ext;
@@ -466,7 +483,8 @@ class ApiController
             }
 
             if ($imageFile && $imageFile !== $filename) {
-                $oldPath = UPLOADS_DIR . '/' . $imageFile;
+                $safeExistingImage = $this->sanitizeStoredImageFile((string) $imageFile);
+                $oldPath = $safeExistingImage === '' ? '' : (UPLOADS_DIR . '/' . $safeExistingImage);
                 if (is_file($oldPath)) {
                     unlink($oldPath);
                 }
@@ -502,11 +520,14 @@ class ApiController
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->respond(['ok' => false, 'error' => 'Invalid request method.'], 405);
         }
+        if (!$this->verifyStateChangingRequest()) {
+            $this->respond(['ok' => false, 'error' => 'Session expired. Please refresh and try again.'], 419);
+        }
 
         $raw = file_get_contents('php://input');
         $data = $raw ? json_decode($raw, true) : [];
         $id = $data['id'] ?? ($_POST['id'] ?? '');
-        $id = is_string($id) ? trim($id) : '';
+        $id = is_string($id) ? $this->sanitizeReceiptId($id) : '';
 
         if ($id === '') {
             $this->respond(['ok' => false, 'error' => 'Missing receipt id.'], 422);
@@ -523,7 +544,8 @@ class ApiController
         }
 
         if ($imageFile) {
-            $path = UPLOADS_DIR . '/' . $imageFile;
+            $safeImage = $this->sanitizeStoredImageFile((string) $imageFile);
+            $path = $safeImage === '' ? '' : (UPLOADS_DIR . '/' . $safeImage);
             if (is_file($path)) {
                 unlink($path);
             }
@@ -536,6 +558,9 @@ class ApiController
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->respond(['ok' => false, 'error' => 'Invalid request method.'], 405);
+        }
+        if (!$this->verifyStateChangingRequest()) {
+            $this->respond(['ok' => false, 'error' => 'Session expired. Please refresh and try again.'], 419);
         }
         if (!$this->veryfiConfigured()) {
             $this->respond(['ok' => false, 'error' => 'Veryfi is not configured.'], 400);
@@ -648,5 +673,35 @@ class ApiController
             'veryfiLimit' => $usage['limit'],
             'veryfiRemaining' => $usage['remaining'],
         ]);
+    }
+
+    private function sanitizeReceiptId(string $id): string
+    {
+        $id = trim($id);
+        if ($id === '') {
+            return '';
+        }
+        return preg_match('/^[a-zA-Z0-9_-]{1,64}$/', $id) === 1 ? $id : '';
+    }
+
+    private function sanitizeStoredImageFile(string $imageFile): string
+    {
+        $safe = basename(trim(str_replace('\\', '/', $imageFile)));
+        if ($safe === '' || $safe === '.' || $safe === '..') {
+            return '';
+        }
+        $ext = strtolower(pathinfo($safe, PATHINFO_EXTENSION));
+        if ($ext === '' || !in_array($ext, self::ALLOWED_UPLOAD_EXTENSIONS, true)) {
+            return '';
+        }
+        return $safe;
+    }
+
+    private function verifyStateChangingRequest(): bool
+    {
+        $headerToken = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+        $postToken = (string) ($_POST['csrf_token'] ?? '');
+        $token = $postToken !== '' ? $postToken : ($headerToken !== '' ? $headerToken : null);
+        return verify_csrf_or_same_origin($token);
     }
 }

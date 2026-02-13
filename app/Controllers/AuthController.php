@@ -62,10 +62,18 @@ class AuthController
         $success = '';
         $pinHash = get_password_reset_pin_hash();
         $pinConfigured = $pinHash !== '';
+        $ip = get_client_ip();
+        $rateStatus = reset_pin_rate_limit_status($ip);
+        if ($rateStatus['blocked']) {
+            $minutes = ceil($rateStatus['retry_after'] / 60);
+            $error = "Too many reset attempts. Try again in about {$minutes} minute(s).";
+        }
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!verify_csrf_or_same_origin($_POST['csrf_token'] ?? null)) {
                 $error = 'Session expired. Please refresh and try again.';
+            } elseif ($rateStatus['blocked']) {
+                // Do not process while rate limited.
             } elseif (!$pinConfigured) {
                 $error = 'Reset PIN is not configured. Run installer to set a 4-digit reset PIN.';
             } else {
@@ -76,7 +84,11 @@ class AuthController
                 if (!preg_match('/^\d{4}$/', $pin)) {
                     $error = 'Reset PIN must be exactly 4 digits.';
                 } elseif (!password_verify($pin, $pinHash)) {
-                    $error = 'Invalid reset PIN.';
+                    $attempts = register_failed_reset_pin_attempt($ip);
+                    $remaining = max(0, MAX_RESET_PIN_ATTEMPTS - $attempts);
+                    $error = $remaining > 0
+                        ? "Invalid reset PIN. {$remaining} attempt(s) remaining."
+                        : 'Too many reset attempts. Try again later.';
                 } elseif (strlen($new) < MIN_PASSWORD_LENGTH) {
                     $error = 'New password is too short. Use at least ' . MIN_PASSWORD_LENGTH . ' characters.';
                 } elseif ($new !== $confirm) {
@@ -84,6 +96,7 @@ class AuthController
                 } elseif (!set_password_hash(password_hash($new, PASSWORD_DEFAULT))) {
                     $error = 'Could not reset password. Check folder permissions.';
                 } else {
+                    clear_failed_reset_pin_attempts($ip);
                     $success = 'Password reset. You can sign in now.';
                 }
             }
