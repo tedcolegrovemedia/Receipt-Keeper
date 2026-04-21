@@ -199,7 +199,7 @@ Common defines:
 declare(strict_types=1);
 
 define('OCR_DEFAULT_ENABLED', true);
-define('APP_BASE_PATH', '/writeoff'); // optional subfolder override
+define('APP_BASE_PATH', '/your-subfolder'); // optional subfolder override
 
 // Storage
 define('STORAGE_MODE', 'auto'); // auto|json|sqlite|mysql
@@ -282,7 +282,7 @@ Important:
 - update `RewriteBase` values in:
   - `/.htaccess`
   - `/public/.htaccess`
-- match your subfolder (example: `/writeoff/`)
+- match your subfolder (example: `/your-subfolder/`)
 
 If deploying without HTTPS yet:
 - `/public/.htaccess` currently forces HTTPS.
@@ -370,6 +370,4 @@ Common issues:
 
 ## Disclaimer
 
-© 2026 Ted Colegrove Media LLC
-
-Use at your own risk. The author makes no guarantees regarding functionality or security and is not responsible for vulnerabilities, exploits, or breaches.
+Use at your own risk. The authors make no guarantees regarding functionality or security and are not responsible for vulnerabilities, exploits, or breaches.

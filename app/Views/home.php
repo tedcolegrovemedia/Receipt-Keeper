@@ -13,7 +13,7 @@
     />
     <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_path('assets/styles.css'), ENT_QUOTES, 'UTF-8'); ?>" />
   </head>
-  <body data-base="<?php echo htmlspecialchars(base_path(), ENT_QUOTES, 'UTF-8'); ?>">
+  <body data-base="<?php echo htmlspecialchars(base_path(), ENT_QUOTES, 'UTF-8'); ?>" data-csrf-token="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
     <main class="app">
       <nav class="top-nav">
         <div class="nav-brand"></div>
@@ -235,9 +235,8 @@
       </section>
 
       <footer class="site-footer">
-        <div class="site-footer__line">© 2026 Ted Colegrove Media LLC</div>
         <div class="site-footer__line">
-          Use at your own risk. The author makes no guarantees regarding functionality or security and is not
+          Use at your own risk. The authors make no guarantees regarding functionality or security and are not
           responsible for vulnerabilities, exploits, or breaches.
         </div>
       </footer>

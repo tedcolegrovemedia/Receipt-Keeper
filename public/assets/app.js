@@ -494,10 +494,24 @@ async function initStorage() {
   }
 }
 
+function getCsrfToken() {
+  const body = document.body;
+  return (body && body.dataset && body.dataset.csrfToken) || "";
+}
+
 async function apiRequest(action, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  const mergedHeaders = { ...(options.headers || {}) };
+  if (method !== "GET" && method !== "HEAD") {
+    const token = getCsrfToken();
+    if (token && !mergedHeaders["X-CSRF-Token"] && !mergedHeaders["x-csrf-token"]) {
+      mergedHeaders["X-CSRF-Token"] = token;
+    }
+  }
   const response = await fetch(`${API_BASE}?action=${encodeURIComponent(action)}`, {
     credentials: "same-origin",
     ...options,
+    headers: mergedHeaders,
   });
   const contentType = response.headers.get("content-type") || "";
   const text = await response.text();
@@ -914,9 +928,12 @@ function logClientError(message, context = {}) {
     context: context && typeof context === "object" ? context : { value: String(context) },
     url: window.location.href,
   };
+  const logHeaders = { "Content-Type": "application/json" };
+  const logToken = getCsrfToken();
+  if (logToken) logHeaders["X-CSRF-Token"] = logToken;
   fetch(`${API_BASE}?action=log`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: logHeaders,
     credentials: "same-origin",
     body: JSON.stringify(payload),
   }).catch(() => {});
@@ -1810,6 +1827,8 @@ async function loadTesseract() {
     const script = document.createElement("script");
     script.src = "https://unpkg.com/tesseract.js@5.0.5/dist/tesseract.min.js";
     script.async = true;
+    script.crossOrigin = "anonymous";
+    script.referrerPolicy = "no-referrer";
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("Failed to load OCR library."));
     document.head.appendChild(script);

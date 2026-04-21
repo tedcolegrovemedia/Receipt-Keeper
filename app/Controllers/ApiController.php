@@ -83,7 +83,7 @@ class ApiController
             $error = error_get_last();
             if ($error !== null) {
                 error_log($error['message'] . ' in ' . $error['file'] . ':' . $error['line']);
-                $self->respond(['ok' => false, 'error' => $error['message']], 500);
+                $self->respond(['ok' => false, 'error' => 'Server error. Check server logs for details.'], 500);
             }
         });
     }
@@ -702,6 +702,6 @@ class ApiController
         $headerToken = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
         $postToken = (string) ($_POST['csrf_token'] ?? '');
         $token = $postToken !== '' ? $postToken : ($headerToken !== '' ? $headerToken : null);
-        return verify_csrf_or_same_origin($token);
+        return verify_csrf_token($token);
     }
 }

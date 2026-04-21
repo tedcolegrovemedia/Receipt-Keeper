@@ -26,7 +26,19 @@ class ImageController
             return;
         }
 
-        $path = UPLOADS_DIR . '/' . $imageFile;
+        $safeImage = basename(str_replace('\\', '/', (string) $imageFile));
+        if ($safeImage === '' || $safeImage === '.' || $safeImage === '..' || $safeImage !== $imageFile) {
+            http_response_code(404);
+            return;
+        }
+        $ext = strtolower(pathinfo($safeImage, PATHINFO_EXTENSION));
+        $allowed = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'pdf'];
+        if ($ext === '' || !in_array($ext, $allowed, true)) {
+            http_response_code(404);
+            return;
+        }
+
+        $path = UPLOADS_DIR . '/' . $safeImage;
         if (!is_file($path)) {
             http_response_code(404);
             return;

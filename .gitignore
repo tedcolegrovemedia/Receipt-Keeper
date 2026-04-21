@@ -5,9 +5,31 @@ config/config.local.php
 data/*
 !data/.htaccess
 data/password.json
+data/uploads/
+data/sessions/
+data/receipts.json
+data/receipts.sqlite*
+data/vendor-memory.json
+data/veryfi-usage.json
+data/attempts.json
 
 # OS / editor
 .DS_Store
+.idea/
+.vscode/
+*.swp
+*~
 
 # Logs
 *.log
+
+# Archives / dumps / exports / backups
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.sql
+*.sql.gz
+*.dump
+*.bak
+receipt-keeper-export-*

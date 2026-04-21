@@ -775,6 +775,17 @@ function ensure_storage_ready(): bool
             return false;
         }
     }
+    $uploadsHtaccess = UPLOADS_DIR . '/.htaccess';
+    if (!is_file($uploadsHtaccess) && is_writable(UPLOADS_DIR)) {
+        @file_put_contents(
+            $uploadsHtaccess,
+            "Require all denied\n<IfModule !mod_authz_core.c>\nOrder allow,deny\nDeny from all\n</IfModule>\n"
+        );
+    }
+    $uploadsIndex = UPLOADS_DIR . '/index.html';
+    if (!is_file($uploadsIndex) && is_writable(UPLOADS_DIR)) {
+        @file_put_contents($uploadsIndex, '');
+    }
 
     $mode = storage_mode();
     if ($mode === 'sqlite') {
