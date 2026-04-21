@@ -1,16 +1,16 @@
-# Receipt Keeper App
+# Receipt Keeper
 
-Self-hosted receipt logger for tax/business expense tracking.
+Receipt Keeper is a self-hosted PHP web app for logging business and tax-deductible expenses from paper and digital receipts. Snap a photo, drag-and-drop an image, or upload a PDF — built-in OCR (Veryfi with a local Tesseract.js fallback) auto-fills the date, vendor, location, and total, while you add the category and business purpose. Receipts are stored in JSON, SQLite, or MySQL alongside their images, filterable by year, searchable, and exportable to CSV or a full backup archive. Single-user auth with a hashed password and reset PIN keeps everything private on your own server.
 
-It supports:
-- camera/photo library uploads from phone
-- desktop drag/drop uploads
-- single PDF receipt upload
-- automatic OCR (Veryfi + local fallback)
-- required fields for category and business purpose
-- edit/delete + bulk delete
-- year filters, pagination, and CSV export
-- diagnostics/admin tools (OCR quota, import/export, base path)
+**At a glance:**
+- Camera, photo library, and drag-and-drop uploads (images + PDF)
+- Automatic OCR: Veryfi API with local Tesseract.js fallback; PDF.js for PDFs
+- Required fields: date, vendor, category, business purpose, total
+- Edit, single delete, and bulk delete
+- Year filters, search, pagination, and CSV export
+- Full backup export/import (ZIP, tar.gz, or JSON fallback)
+- Admin diagnostics: OCR quota, storage checks, base path override
+- Storage backends: JSON, SQLite, or MySQL
 
 ---
 
@@ -347,13 +347,21 @@ Common issues:
 
 ## Security Notes
 
-- Keep these out of git:
-  - `config/config.local.php`
-  - `data/*` runtime files
+Built-in protections:
+- Session cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` over HTTPS.
+- Passwords and reset PIN are stored as bcrypt hashes; login and reset are rate-limited per IP.
+- Authenticated state-changing endpoints require a CSRF token (header or form field).
+- Strict Content-Security-Policy, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: no-referrer` are set on every response.
+- Uploaded files are served through an authenticated PHP endpoint with an extension allowlist; a deny-all `.htaccess` is written into `data/uploads/` on first run.
+
+Operator responsibilities:
+- Keep these out of git: `config/config.local.php`, `data/*` runtime files.
 - Keep `data/.htaccess` in place.
+- On nginx, add an equivalent rule to block direct access to `data/` (e.g. `location ~ /data/ { deny all; }`).
 - Use HTTPS in production.
-- Rotate shared password periodically.
+- Rotate the admin password periodically.
 - Keep PHP and extensions patched.
+- For extra hardening, vendor `tesseract.js` locally under `public/vendor/` instead of loading it from the CDN, and tighten the CSP accordingly.
 
 ---
 
